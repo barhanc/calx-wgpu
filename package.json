@@ -8,7 +8,10 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "example": "vite example"
+    "example": "vite example",
+    "format": "biome format --write .",
+    "lint": "biome lint --write .",
+    "check": "biome check --write ."
   },
   "keywords": [
     "pytorch",
@@ -18,11 +21,14 @@
     "deep-learning",
     "browser-ml"
   ],
-  "author": "",
-  "license": "Apache-2.0",
+  "author": "Bartosz Hanc <bartosz.hanc02@gmail.com>",
+  "license": "MIT",
   "type": "module",
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@biomejs/cli-linux-x64": "^2.5.14",
     "@webgpu/types": "^0.1.72",
+    "lefthook": "^2.1.14",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
@@ -42,5 +48,13 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "homepage": "https://github.com/barhanc/phlox-wgpu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barhanc/phlox-wgpu.git"
+  },
+  "bugs": {
+    "url": "https://github.com/barhanc/phlox-wgpu/issues"
+  }
 }
