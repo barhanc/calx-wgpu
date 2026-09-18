@@ -15,7 +15,7 @@ export type TypedArray = Float32Array | Int32Array | Int8Array | Uint8Array | Ui
  *
  * Encapsulates an allocated `GPUBuffer` in device VRAM along with its metadata
  * (`dtype`, `shape`, `numel`). Use {@link Tensor.getData} to read raw bytes
- * back into host memory, or {@link Tensor.dispose} to release GPU memory.
+ * back into host memory, or {@link Tensor.destroy} to release GPU memory.
  */
 export type Tensor = {
   /** The element data type of the tensor. */
@@ -35,11 +35,17 @@ export type Tensor = {
    * @returns Raw byte buffer containing the tensor data.
    */
   readonly getData: () => Promise<ArrayBuffer>;
-  /**
-   * Releases the underlying GPU buffer.
-   */
-  readonly dispose: () => void;
 
+  /**
+   * Destroys and releases the underlying GPU buffer.
+   */
+  readonly destroy: () => void;
+
+  /**
+   * Prevents plain JS objects from being cast as Tensors. Tensors should only
+   * be created via the `tensor` function exported from this module.
+   * @internal
+   */
   readonly [tensorBrand]: never;
 };
 
@@ -101,7 +107,7 @@ export function tensor(
 
   const attributes = { dtype, shape, numel, device, buffer };
 
-  const dispose = () => buffer.destroy();
+  const destroy = () => buffer.destroy();
 
   const getData = async (): Promise<ArrayBuffer> => {
     const encoder = device.createCommandEncoder();
@@ -118,5 +124,5 @@ export function tensor(
     }
   };
 
-  return { ...attributes, getData, dispose } as Tensor;
+  return { ...attributes, getData, destroy } as Tensor;
 }
