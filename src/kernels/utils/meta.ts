@@ -1,5 +1,5 @@
-import { MAX_NDIM } from '../../core/tensor';
-import type { Tensor } from '../../core/tensor';
+import { MAX_NDIM } from '../../tensor';
+import type { Tensor } from '../../tensor';
 
 /**
  * Total byte size of the std140 TensorMeta uniform buffer (80 bytes).

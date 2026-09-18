@@ -1,5 +1,3 @@
-declare const tensorBrand: unique symbol;
-
 /**
  * Supported tensor data types in WebGPU storage buffers.
  */
@@ -32,13 +30,6 @@ export type Tensor = {
 
   /** Destroys and releases the underlying GPU buffer. */
   readonly destroy: () => void;
-
-  /**
-   * Prevents plain JS objects from being cast as Tensors. Tensors should only
-   * be created via the `tensor` function exported from this module.
-   * @internal
-   */
-  readonly [tensorBrand]: never;
 };
 
 // prettier-ignore
@@ -113,7 +104,6 @@ export function tensor(
   const getData = async (): Promise<ArrayBuffer> => {
     const encoder = device.createCommandEncoder();
     const staging = device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
-
     try {
       encoder.copyBufferToBuffer(buffer, 0, staging, 0, alignedSize);
       device.queue.submit([encoder.finish()]);

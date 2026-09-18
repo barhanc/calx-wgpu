@@ -1,0 +1,297 @@
+import type { Kernel } from '../kernel';
+import type { WgpuExecutionContext } from '../context';
+import { createComputeBundle } from '../dispatch';
+
+const NAME = 'aten::mm.default';
+
+/**
+ * WGSL compute shader for matrix multiplication with shared-memory tiling
+ * (32x32 tile, 4x4 per thread). Copied directly from ExecuTorch
+ * backends/webgpu/runtime/ops/mm/mm_tiled.wgsl.
+ */
+const SHADER_TILED = /* wgsl */ `
+struct Params {
+  M: u32,
+  N: u32,
+  K: u32,
+  pad_: u32,
+};
+
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read> b: array<f32>;
+@group(0) @binding(2) var<storage, read_write> out: array<f32>;
+@group(0) @binding(3) var<uniform> params: Params;
+
+const TILE: u32 = 32u;
+const RPT: u32 = 4u;
+
+var<workgroup> a_sub: array<array<f32, 32>, 32>;
+var<workgroup> b_sub: array<array<f32, 32>, 32>;
+
+fn read_a(row: u32, col: u32) -> f32 {
+  if (row < params.M && col < params.K) {
+    return a[row * params.K + col];
+  }
+  return 0.0;
+}
+
+fn read_b(row: u32, col: u32) -> f32 {
+  if (row < params.K && col < params.N) {
+    return b[row * params.N + col];
+  }
+  return 0.0;
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn main(
+  @builtin(workgroup_id) wg_id: vec3<u32>,
+  @builtin(local_invocation_id) local_id: vec3<u32>
+) {
+  let tile_row0 = wg_id.y * TILE;
+  let tile_col0 = wg_id.x * TILE;
+  let tile_row = local_id.y * RPT;
+  let tile_col = local_id.x * RPT;
+
+  var acc: array<array<f32, 4>, 4>;
+  for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+    for (var ic: u32 = 0u; ic < RPT; ic = ic + 1u) {
+      acc[ir][ic] = 0.0;
+    }
+  }
+
+  let num_tiles = (params.K + TILE - 1u) / TILE;
+  for (var t: u32 = 0u; t < num_tiles; t = t + 1u) {
+    let k_start = t * TILE;
+    for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+      let arow = local_id.y * RPT + ir;
+      for (var kk: u32 = 0u; kk < RPT; kk = kk + 1u) {
+        let col = local_id.x * RPT + kk;
+        a_sub[arow][col] = read_a(tile_row0 + arow, k_start + col);
+        b_sub[arow][col] = read_b(k_start + arow, tile_col0 + col);
+      }
+    }
+    workgroupBarrier();
+
+    for (var k: u32 = 0u; k < TILE; k = k + 1u) {
+      for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+        let aval = a_sub[tile_row + ir][k];
+        for (var ic: u32 = 0u; ic < RPT; ic = ic + 1u) {
+          acc[ir][ic] = acc[ir][ic] + aval * b_sub[k][tile_col + ic];
+        }
+      }
+    }
+    workgroupBarrier();
+  }
+
+  for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+    for (var ic: u32 = 0u; ic < RPT; ic = ic + 1u) {
+      let r = tile_row0 + tile_row + ir;
+      let c = tile_col0 + tile_col + ic;
+      if (r < params.M && c < params.N) {
+        out[r * params.N + c] = acc[ir][ic];
+      }
+    }
+  }
+}
+`;
+
+/**
+ * WGSL compute shader for vectorized 128-bit memory-bandwidth optimized matrix
+ * multiplication. Operates on vec4<f32> for 4x wider memory transactions when K
+ * and N are multiples of 4. Copied directly from ExecuTorch
+ * backends/webgpu/runtime/ops/mm/mm_vec4.wgsl.
+ */
+const SHADER_VEC4 = /* wgsl */ `
+struct Params {
+  M: u32,
+  N: u32,
+  K: u32,
+  pad_: u32,
+};
+
+@group(0) @binding(0) var<storage, read> a: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> b: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> out: array<vec4<f32>>;
+@group(0) @binding(3) var<uniform> params: Params;
+
+const TILE: u32 = 32u;
+const RPT: u32 = 4u;
+const TILE4: u32 = 8u;
+
+var<workgroup> a_sub: array<array<vec4<f32>, 8>, 32>;
+var<workgroup> b_sub: array<array<vec4<f32>, 8>, 32>;
+
+fn read_a4(row: u32, k4: u32) -> vec4<f32> {
+  if (row < params.M && k4 * 4u < params.K) {
+    return a[row * (params.K / 4u) + k4];
+  }
+  return vec4<f32>(0.0);
+}
+
+fn read_b4(krow: u32, n4: u32) -> vec4<f32> {
+  if (krow < params.K && n4 * 4u < params.N) {
+    return b[krow * (params.N / 4u) + n4];
+  }
+  return vec4<f32>(0.0);
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn main(
+  @builtin(workgroup_id) wg_id: vec3<u32>,
+  @builtin(local_invocation_id) local_id: vec3<u32>
+) {
+  let tile_row0 = wg_id.y * TILE;
+  let tile_col0_4 = wg_id.x * TILE4;
+  let tile_row = local_id.y * RPT;
+  let tile_col4 = local_id.x;
+
+  var acc: array<vec4<f32>, 4>;
+  for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+    acc[ir] = vec4<f32>(0.0);
+  }
+
+  let num_tiles = (params.K + TILE - 1u) / TILE;
+  for (var t: u32 = 0u; t < num_tiles; t = t + 1u) {
+    let k4_start = t * TILE4;
+    for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+      let arow = local_id.y * RPT + ir;
+      a_sub[arow][local_id.x] = read_a4(tile_row0 + arow, k4_start + local_id.x);
+      b_sub[arow][local_id.x] = read_b4(t * TILE + arow, tile_col0_4 + local_id.x);
+    }
+    workgroupBarrier();
+
+    for (var k4: u32 = 0u; k4 < TILE4; k4 = k4 + 1u) {
+      let b0 = b_sub[k4 * 4u + 0u][tile_col4];
+      let b1 = b_sub[k4 * 4u + 1u][tile_col4];
+      let b2 = b_sub[k4 * 4u + 2u][tile_col4];
+      let b3 = b_sub[k4 * 4u + 3u][tile_col4];
+      for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+        let ac = a_sub[tile_row + ir][k4];
+        acc[ir] = acc[ir] + b0 * ac.x + b1 * ac.y + b2 * ac.z + b3 * ac.w;
+      }
+    }
+    workgroupBarrier();
+  }
+
+  for (var ir: u32 = 0u; ir < RPT; ir = ir + 1u) {
+    let r = tile_row0 + tile_row + ir;
+    let c4 = tile_col0_4 + tile_col4;
+    if (r < params.M && c4 * 4u < params.N) {
+      out[r * (params.N / 4u) + c4] = acc[ir];
+    }
+  }
+}
+`;
+
+/**
+ * Output tile dimension per workgroup (32x32).
+ */
+const TILE = 32;
+
+/**
+ * Argument schema for `aten::mm.default`.
+ */
+export type MmArgs = {
+  /** First 2D input matrix (M x K) value ID in the execution context. */
+  readonly in1: number;
+  /** Second 2D input matrix (K x N) value ID in the execution context. */
+  readonly in2: number;
+  /** 2D output matrix (M x N) value ID in the execution context. */
+  readonly out: number;
+};
+
+/**
+ * Creates a uniform buffer encoding 16-byte aligned `Params { M, N, K, pad_ }`.
+ *
+ * @param device WebGPU device instance.
+ * @param m Number of rows of matrix A.
+ * @param n Number of columns of matrix B.
+ * @param k Shared inner dimension.
+ * @returns Allocated and populated uniform GPUBuffer.
+ */
+function createMmParamsBuffer(device: GPUDevice, m: number, n: number, k: number): GPUBuffer {
+  const buffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Uint32Array(buffer.getMappedRange()).set([m, n, k, 0]);
+  buffer.unmap();
+  return buffer;
+}
+
+/**
+ * Internal dispatch builder for `aten::mm.default`.
+ * @param ctx The execution context.
+ * @param args Named argument value IDs for the operator.
+ */
+function attachTo(ctx: WgpuExecutionContext, args: MmArgs): void {
+  const a = ctx.getTensor(args.in1);
+  const b = ctx.getTensor(args.in2);
+  const out = ctx.getTensor(args.out);
+
+  if (a.dtype !== 'float32' || b.dtype !== 'float32' || out.dtype !== 'float32') {
+    throw new Error(`${NAME}: Only float32 tensors are currently supported`);
+  }
+
+  if (a.shape.length !== 2 || b.shape.length !== 2 || out.shape.length !== 2) {
+    throw new Error(`${NAME}: Tensors must be 2D matrices`);
+  }
+
+  const [m, kA] = a.shape as [number, number];
+  const [kB, n] = b.shape as [number, number];
+  const [outM, outN] = out.shape as [number, number];
+
+  if (kA !== kB) {
+    throw new Error(`${NAME}: Matrix inner dimensions must match (${kA} !== ${kB})`);
+  }
+
+  if (outM !== m || outN !== n) {
+    throw new Error(`${NAME}: Output shape [${outM}, ${outN}] !== expected [${m}, ${n}]`);
+  }
+
+  const device = ctx.device;
+  const paramsBuffer = createMmParamsBuffer(device, m, n, kA);
+
+  const workgroupCountX = Math.ceil(n / TILE);
+  const workgroupCountY = Math.ceil(m / TILE);
+
+  // Use vectorized 128-bit memory loads when K and N are divisible by 4
+  const useVec4 = kA % 4 === 0 && n % 4 === 0;
+  const shader = useVec4 ? SHADER_VEC4 : SHADER_TILED;
+
+  const bundle = createComputeBundle(device, shader, [
+    { binding: 0, buffer: a.buffer },
+    { binding: 1, buffer: b.buffer },
+    { binding: 2, buffer: out.buffer },
+    { binding: 3, buffer: paramsBuffer },
+  ]);
+
+  ctx.ownBuffer(paramsBuffer);
+
+  ctx.addDispatch({
+    pipeline: bundle.pipeline,
+    bindGroup: bundle.bindGroup,
+    workgroupCountX,
+    workgroupCountY,
+  });
+}
+
+/**
+ * WebGPU compute kernel for ExecuTorch `aten::mm.default`.
+ *
+ * Computes matrix multiplication `out = A @ B` using a shared-memory tiled GEMM
+ * (32x32 output tile per workgroup, each thread computing a 4x4 sub-tile). Automatically
+ * selects the 128-bit vectorized `vec4<f32>` memory path when both K and N are multiples
+ * of 4, falling back to the standard scalar tiled path for arbitrary dimensions.
+ *
+ * @example
+ * ```ts
+ * kernels.mm.attachTo(ctx, { in1: 0, in2: 1, out: 2 });
+ * ```
+ */
+export const mm: Kernel<MmArgs> = {
+  name: NAME,
+  wgsl: SHADER_TILED,
+  attachTo,
+};

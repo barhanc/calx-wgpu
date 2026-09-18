@@ -1,6 +1,6 @@
-import type { Kernel } from '../core/kernel';
-import type { WgpuExecutionContext } from '../core/context';
-import { compute2DWorkgroupCount, createComputeBundle } from '../core/dispatch';
+import type { Kernel } from '../kernel';
+import type { WgpuExecutionContext } from '../context';
+import { createComputeBundle } from '../dispatch';
 
 import { isBroadcastable } from './utils/broadcast';
 import { createTensorMetaBuffer, TENSOR_META_WGSL } from './utils/meta';
@@ -100,7 +100,9 @@ function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
 
   const device = ctx.device;
   const wgSize = 256;
-  const { workgroupCountX, workgroupCountY } = compute2DWorkgroupCount(out.numel, wgSize);
+  const totalWorkgroups = Math.ceil(out.numel / wgSize);
+  const workgroupCountX = Math.min(totalWorkgroups, 65535);
+  const workgroupCountY = Math.ceil(totalWorkgroups / 65535);
 
   const bundle = createComputeBundle(
     device,

@@ -38,26 +38,6 @@ export type WgpuDispatch = {
   readonly workgroupCountZ?: number;
 };
 
-/**
- * Computes 2D-folded workgroup counts to prevent exceeding the WebGPU limit
- * of 65,535 workgroups per dimension for large tensors.
- *
- * @param numThreads Total number of threads (usually tensor numel).
- * @param workgroupSize Number of threads per workgroup.
- * @param maxWorkgroupsPerDim Maximum allowed workgroups per dimension (default: 65535).
- * @returns An object containing workgroupCountX and workgroupCountY.
- */
-export function compute2DWorkgroupCount(
-  numThreads: number,
-  workgroupSize: number,
-  maxWorkgroupsPerDim: number = 65535
-): { readonly workgroupCountX: number; readonly workgroupCountY: number } {
-  const totalWorkgroups = Math.ceil(numThreads / workgroupSize);
-  const workgroupCountX = Math.min(totalWorkgroups, maxWorkgroupsPerDim);
-  const workgroupCountY = Math.ceil(totalWorkgroups / maxWorkgroupsPerDim);
-  return { workgroupCountX, workgroupCountY };
-}
-
 const pipelineCache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
 
 /**

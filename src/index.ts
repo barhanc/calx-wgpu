@@ -1,7 +1,7 @@
-export * from './core/tensor';
-export * from './core/device';
-export * from './core/context';
-export * from './core/kernel';
-export * from './core/dispatch';
+export * from './tensor';
+export * from './device';
+export * from './context';
+export * from './kernel';
+export * from './dispatch';
 
 export * from './kernels';
