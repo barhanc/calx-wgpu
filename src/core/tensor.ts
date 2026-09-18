@@ -6,11 +6,6 @@ declare const tensorBrand: unique symbol;
 export type DType = 'float32' | 'float16' | 'int32' | 'int8' | 'uint8' | 'bool';
 
 /**
- * JavaScript TypedArrays supported for CPU host data transfers.
- */
-export type TypedArray = Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array;
-
-/**
  * A WebGPU-backed Tensor instance.
  *
  * Encapsulates an allocated `GPUBuffer` in device VRAM along with its metadata
@@ -24,7 +19,6 @@ export type Tensor = {
   readonly numel: number;
   /** The dimensions of the tensor. */
   readonly shape: readonly number[];
-
   /** The WebGPU device that owns this tensor's buffer. */
   readonly device: GPUDevice;
   /** The underlying WebGPU storage buffer in VRAM. */
@@ -36,9 +30,7 @@ export type Tensor = {
    */
   readonly getData: () => Promise<ArrayBuffer>;
 
-  /**
-   * Destroys and releases the underlying GPU buffer.
-   */
+  /** Destroys and releases the underlying GPU buffer. */
   readonly destroy: () => void;
 
   /**
@@ -61,24 +53,31 @@ const STORAGE_BUFFER_USAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | 
 const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
 
 /**
- * Creates a new Tensor instance backed by a WebGPU storage buffer.
+ * Maximum tensor rank supported by WebGPU kernels (std140 layout limit).
+ */
+export const MAX_NDIM = 8;
+
+/**
+ * Creates a WebGPU-backed Tensor.
  *
- * If `source` is a `TypedArray`, a new GPUBuffer is created and populated with the data.
- * If `source` is an existing `GPUBuffer`, it is validated and wrapped zero-copy.
- * @param dtype Data type of the tensor elements.
- * @param shape Dimensions of the tensor (up to rank 8).
- * @param source Source data as a CPU TypedArray or an existing WebGPU GPUBuffer.
- * @param device WebGPU device instance.
+ * If `source` is omitted, allocates an uninitialized storage buffer in device VRAM.
+ * If `source` is a `TypedArray`, uploads data to a newly allocated GPU storage buffer.
+ * If `source` is an existing `GPUBuffer`, wraps it zero-copy without allocating new memory.
+ *
+ * @param dtype Data type of elements.
+ * @param shape Dimensions of the tensor (rank <= 8).
+ * @param device The WebGPU device.
+ * @param source Optional initial host data or existing GPUBuffer to wrap.
  * @returns A newly created Tensor closure bundle.
  */
 export function tensor(
   dtype: DType,
   shape: readonly number[],
-  source: GPUBuffer | TypedArray,
-  device: GPUDevice
+  device: GPUDevice,
+  source?: GPUBuffer | Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array
 ): Tensor {
-  if (shape.length > 8) {
-    throw new Error(`Tensor rank ${shape.length} exceeds maximum rank of 8`);
+  if (shape.length > MAX_NDIM) {
+    throw new Error(`Tensor rank ${shape.length} exceeds maximum rank of ${MAX_NDIM}`);
   }
   if (shape.some((dim) => dim <= 0 || !Number.isInteger(dim))) {
     throw new Error('Tensor dimensions must be positive integers');
@@ -89,7 +88,9 @@ export function tensor(
   const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
 
   let buffer: GPUBuffer;
-  if (source instanceof GPUBuffer) {
+  if (!source) {
+    buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
+  } else if (source instanceof GPUBuffer) {
     if (source.size < byteLength) {
       throw new Error(`GPUBuffer size (${source.size}B) < required tensor size (${byteLength}B)`);
     }
@@ -116,7 +117,6 @@ export function tensor(
     try {
       encoder.copyBufferToBuffer(buffer, 0, staging, 0, alignedSize);
       device.queue.submit([encoder.finish()]);
-
       await staging.mapAsync(GPUMapMode.READ);
       return staging.getMappedRange(0, byteLength).slice(0);
     } finally {

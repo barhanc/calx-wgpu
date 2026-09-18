@@ -1,4 +1,4 @@
-import { initDevice, isWebGPUSupported, tensor } from '../src';
+import { initDevice, isWebGPUSupported, kernels, tensor, WgpuExecutionContext } from '../src';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const runBtn = document.getElementById('run-btn') as HTMLButtonElement;
@@ -35,7 +35,7 @@ runBtn.addEventListener('click', async () => {
     log(`   Data:  [${Array.from(rawDataA).join(', ')}]`);
 
     log('3. Allocating WebGPU Tensor (uploading to VRAM)...');
-    const tensorA = tensor('float32', shapeA, rawDataA, device);
+    const tensorA = tensor('float32', shapeA, device, rawDataA);
     log(`   VRAM buffer allocated (size: ${tensorA.buffer.size} bytes)`);
 
     log('4. Reading data back from GPU via tensorA.getData()...');
@@ -67,7 +67,7 @@ runBtn.addEventListener('click', async () => {
     log(`   External GPUBuffer created (size: ${externalBuffer.size} bytes)`);
 
     log('6. Wrapping external GPUBuffer into Tensor...');
-    const tensorB = tensor('int32', shapeB, externalBuffer, device);
+    const tensorB = tensor('int32', shapeB, device, externalBuffer);
     log(
       `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer})`
     );
@@ -86,6 +86,55 @@ runBtn.addEventListener('click', async () => {
 
     tensorB.destroy();
     log('   External buffer destroyed via tensorB.destroy().');
+
+    log('\n--- Test C: Context Execution of aten.add.Tensor ---');
+    log('8. Building WgpuExecutionContext with input tensors and alpha constant...');
+    // x shape: [2, 3], y shape: [1, 3] -> broadcast output: [2, 3]
+    const xData = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    const yData = new Float32Array([10.0, 20.0, 30.0]);
+    const tensorX = tensor('float32', [2, 3], device, xData);
+    const tensorY = tensor('float32', [1, 3], device, yData);
+    const tensorOut = tensor('float32', [2, 3], device);
+
+    const ctx = new WgpuExecutionContext(device);
+    ctx.setTensor(0, tensorX);
+    ctx.setTensor(1, tensorY);
+    ctx.setScalar(2, 2.0); // alpha = 2.0
+    ctx.setTensor(3, tensorOut);
+
+    // Build and record dispatch into context
+    kernels.add.attachTo(ctx, { in1: 0, in2: 1, alpha: 2, out: 3 });
+    log('   Context recorded 1 compute dispatch.');
+
+    log('9. Executing context dispatches on WebGPU...');
+    const t0 = performance.now();
+    ctx.execute();
+    await device.queue.onSubmittedWorkDone();
+    const durationMs = performance.now() - t0;
+    log(`   Execution completed in ${durationMs.toFixed(3)}ms (GPU queue wall-time)`);
+    log(`   Out shape: [${tensorOut.shape.join(', ')}]`);
+
+    log('10. Reading back compute shader output...');
+    const outBytes = await tensorOut.getData();
+    const outFloats = new Float32Array(outBytes);
+    log(`   Result: [${Array.from(outFloats).join(', ')}]`);
+
+    // Expected:
+    // [1 + 20, 2 + 40, 3 + 60, 4 + 20, 5 + 40, 6 + 60] = [21, 42, 63, 24, 45, 66]
+    const expected = [21.0, 42.0, 63.0, 24.0, 45.0, 66.0];
+    const matchesC = expected.every((val, idx) => Math.abs(val - outFloats[idx]) < 1e-4);
+    if (matchesC) {
+      log('   ✅ Test C PASSED: WGSL compute shader add with broadcasting verified!');
+    } else {
+      log(
+        `   ❌ Test C FAILED: Expected [${expected.join(', ')}] but got [${Array.from(outFloats).join(', ')}]`
+      );
+    }
+
+    ctx.destroy();
+    tensorX.destroy();
+    tensorY.destroy();
+    tensorOut.destroy();
 
     log('\n🎉 All checks completed successfully!');
   } catch (err) {
