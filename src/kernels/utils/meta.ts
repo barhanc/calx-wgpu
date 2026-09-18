@@ -15,6 +15,10 @@ export const TENSOR_META_BYTE_SIZE = 80;
 /**
  * Common WGSL struct definition for std140 TensorMeta uniform buffers.
  * Defines ndim, numel, and 8-element sizes/strides packaged as 2 x vec4<u32>.
+ *
+ * Source: ExecuTorch (backends/webgpu/runtime/ops/TensorMeta.h)
+ * GitHub: https://github.com/pytorch/executorch/blob/main/backends/webgpu/runtime/ops/TensorMeta.h
+ * License: BSD-3-Clause (Copyright (c) Meta Platforms, Inc. and affiliates)
  */
 export const TENSOR_META_WGSL = /* wgsl */ `
 struct TensorMeta {

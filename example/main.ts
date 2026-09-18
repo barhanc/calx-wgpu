@@ -102,8 +102,8 @@ runBtn.addEventListener('click', async () => {
     ctx.setScalar(2, 2.0); // alpha = 2.0
     ctx.setTensor(3, tensorOut);
 
-    // Build and record dispatch into context
-    kernels.add.attachTo(ctx, { in1: 0, in2: 1, alpha: 2, out: 3 });
+    // Build and record dispatch into context [in1, in2, out, alpha]
+    kernels.add.attachTo(ctx, [0, 1, 3, 2]);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -154,7 +154,7 @@ runBtn.addEventListener('click', async () => {
     mmCtx.setTensor(1, tensorMatB);
     mmCtx.setTensor(2, tensorMatOut);
 
-    kernels.mm.attachTo(mmCtx, { in1: 0, in2: 1, out: 2 });
+    kernels.mm.attachTo(mmCtx, [0, 1, 2]);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
@@ -203,7 +203,7 @@ runBtn.addEventListener('click', async () => {
     vecCtx.setTensor(1, tensorVecB);
     vecCtx.setTensor(2, tensorVecOut);
 
-    kernels.mm.attachTo(vecCtx, { in1: 0, in2: 1, out: 2 });
+    kernels.mm.attachTo(vecCtx, [0, 1, 2]);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
@@ -281,7 +281,7 @@ runBtn.addEventListener('click', async () => {
     benchCtx.setTensor(1, benchTensorB);
     benchCtx.setTensor(2, benchTensorOut);
 
-    kernels.mm.attachTo(benchCtx, { in1: 0, in2: 1, out: 2 });
+    kernels.mm.attachTo(benchCtx, [0, 1, 2]);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
@@ -392,7 +392,7 @@ runBtn.addEventListener('click', async () => {
     oddCtx.setTensor(1, oddTensorB);
     oddCtx.setTensor(2, oddTensorOut);
 
-    kernels.mm.attachTo(oddCtx, { in1: 0, in2: 1, out: 2 });
+    kernels.mm.attachTo(oddCtx, [0, 1, 2]);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check

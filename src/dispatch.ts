@@ -80,8 +80,8 @@ export function createComputeBundle(
 
   const serializedConsts = serializeConstants(constants);
   const cacheKey = `${entryPoint}#${serializedConsts}#${shader}`;
-  let pipeline = deviceMap.get(cacheKey);
 
+  let pipeline = deviceMap.get(cacheKey);
   if (!pipeline) {
     const module = device.createShaderModule({ code: shader });
     const computeStage: GPUProgrammableStage = { module, entryPoint, constants };

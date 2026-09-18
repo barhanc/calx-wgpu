@@ -8,8 +8,11 @@ import { createTensorMetaBuffer, TENSOR_META_WGSL } from './utils/meta';
 const NAME = 'aten::add.Tensor';
 
 /**
- * WGSL compute shader for binary addition with broadcast support,
- * copied directly from ExecuTorch backends/webgpu/runtime/ops/add/binary_add.wgsl.
+ * WGSL compute shader for binary addition with broadcast support.
+ *
+ * Source: ExecuTorch (backends/webgpu/runtime/ops/add/binary_add.wgsl)
+ * GitHub: https://github.com/pytorch/executorch/blob/main/backends/webgpu/runtime/ops/add/binary_add.wgsl
+ * License: BSD-3-Clause (Copyright (c) Meta Platforms, Inc. and affiliates)
  */
 const SHADER = /* wgsl */ `
 @group(0) @binding(0) var<storage, read> input1: array<f32>;
@@ -62,29 +65,24 @@ fn main(
 `;
 
 /**
- * Argument schema for `aten::add.Tensor`.
+ * Positional argument tuple for `aten::add.Tensor`:
+ * `[in1, in2, out]` or `[in1, in2, out, alpha]`
  */
-export type AddArgs = {
-  /** First input tensor value ID in the execution context. */
-  readonly in1: number;
-  /** Second input tensor value ID in the execution context. */
-  readonly in2: number;
-  /** Output tensor value ID in the execution context. */
-  readonly out: number;
-  /** Optional alpha scalar constant value ID in the execution context (defaults to 1.0). */
-  readonly alpha?: number;
-};
+export type AddArgs =
+  | readonly [in1: number, in2: number, out: number]
+  | readonly [in1: number, in2: number, out: number, alpha: number];
 
 /**
  * Internal dispatch builder for `aten::add.Tensor`.
  * @param ctx The execution context.
- * @param args Named argument value IDs for the operator.
+ * @param args Positional argument tuple for the operator.
  */
 function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
-  const in1 = ctx.getTensor(args.in1);
-  const in2 = ctx.getTensor(args.in2);
-  const out = ctx.getTensor(args.out);
-  const alpha = args.alpha !== undefined ? ctx.getScalar(args.alpha) : 1.0;
+  const [in1Id, in2Id, outId, alphaId] = args;
+  const in1 = ctx.getTensor(in1Id);
+  const in2 = ctx.getTensor(in2Id);
+  const out = ctx.getTensor(outId);
+  const alpha = alphaId !== undefined ? ctx.getScalar(alphaId) : 1.0;
 
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${NAME}: Only float32 tensors are currently supported`);

@@ -6,8 +6,11 @@ const NAME = 'aten::mm.default';
 
 /**
  * WGSL compute shader for matrix multiplication with shared-memory tiling
- * (32x32 tile, 4x4 per thread). Copied directly from ExecuTorch
- * backends/webgpu/runtime/ops/mm/mm_tiled.wgsl.
+ * (32x32 tile, 4x4 per thread).
+ *
+ * Source: ExecuTorch (backends/webgpu/runtime/ops/mm/mm_tiled.wgsl)
+ * GitHub: https://github.com/pytorch/executorch/blob/main/backends/webgpu/runtime/ops/mm/mm_tiled.wgsl
+ * License: BSD-3-Clause (Copyright (c) Meta Platforms, Inc. and affiliates)
  */
 const SHADER_TILED = /* wgsl */ `
 struct Params {
@@ -98,8 +101,11 @@ fn main(
 /**
  * WGSL compute shader for vectorized 128-bit memory-bandwidth optimized matrix
  * multiplication. Operates on vec4<f32> for 4x wider memory transactions when K
- * and N are multiples of 4. Copied directly from ExecuTorch
- * backends/webgpu/runtime/ops/mm/mm_vec4.wgsl.
+ * and N are multiples of 4.
+ *
+ * Source: ExecuTorch (backends/webgpu/runtime/ops/mm/mm_vec4.wgsl)
+ * GitHub: https://github.com/pytorch/executorch/blob/main/backends/webgpu/runtime/ops/mm/mm_vec4.wgsl
+ * License: BSD-3-Clause (Copyright (c) Meta Platforms, Inc. and affiliates)
  */
 const SHADER_VEC4 = /* wgsl */ `
 struct Params {
@@ -189,16 +195,10 @@ fn main(
 const TILE = 32;
 
 /**
- * Argument schema for `aten::mm.default`.
+ * Positional argument tuple for `aten::mm.default`:
+ * `[in1, in2, out]`
  */
-export type MmArgs = {
-  /** First 2D input matrix (M x K) value ID in the execution context. */
-  readonly in1: number;
-  /** Second 2D input matrix (K x N) value ID in the execution context. */
-  readonly in2: number;
-  /** 2D output matrix (M x N) value ID in the execution context. */
-  readonly out: number;
-};
+export type MmArgs = readonly [in1: number, in2: number, out: number];
 
 /**
  * Creates a uniform buffer encoding 16-byte aligned `Params { M, N, K, pad_ }`.
@@ -223,12 +223,12 @@ function createMmParamsBuffer(device: GPUDevice, m: number, n: number, k: number
 /**
  * Internal dispatch builder for `aten::mm.default`.
  * @param ctx The execution context.
- * @param args Named argument value IDs for the operator.
+ * @param args Positional argument tuple for the operator.
  */
-function attachTo(ctx: WgpuExecutionContext, args: MmArgs): void {
-  const a = ctx.getTensor(args.in1);
-  const b = ctx.getTensor(args.in2);
-  const out = ctx.getTensor(args.out);
+function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
+  const a = ctx.getTensor(in1Id);
+  const b = ctx.getTensor(in2Id);
+  const out = ctx.getTensor(outId);
 
   if (a.dtype !== 'float32' || b.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${NAME}: Only float32 tensors are currently supported`);
