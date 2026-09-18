@@ -1,0 +1,46 @@
+{
+  "name": "phlox-wgpu",
+  "version": "0.1.0",
+  "description": "Pure WebGPU inference runtime for PyTorch ExecuTorch .pte models in TypeScript",
+  "main": "./dist/index.cjs",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "example": "vite example"
+  },
+  "keywords": [
+    "pytorch",
+    "executorch",
+    "webgpu",
+    "wgsl",
+    "deep-learning",
+    "browser-ml"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "devDependencies": {
+    "@webgpu/types": "^0.1.72",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "flatbuffers": "^25.9.23"
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}
