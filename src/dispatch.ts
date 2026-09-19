@@ -58,7 +58,7 @@ function serializeConstants(constants?: Record<string, number>): string {
  * Builds and caches a compute pipeline along with its bind group from a list of
  * bindings.
  * @param device WebGPU device instance.
- * @param shader WGSL shader code string.
+ * @param code WGSL shader code string.
  * @param bindings List of buffer bindings for `@group(0)`.
  * @param constants Optional pipeline override constants.
  * @param entryPoint Shader entry point function name (default: 'main').
@@ -66,7 +66,7 @@ function serializeConstants(constants?: Record<string, number>): string {
  */
 export function createComputeBundle(
   device: GPUDevice,
-  shader: string,
+  code: string,
   bindings: readonly BindingSpec[],
   constants: Record<string, number> = {},
   entryPoint: string = 'main'
@@ -78,11 +78,11 @@ export function createComputeBundle(
   }
 
   const serializedConsts = serializeConstants(constants);
-  const cacheKey = `${entryPoint}#${serializedConsts}#${shader}`;
+  const cacheKey = `${entryPoint}#${serializedConsts}#${code}`;
 
   let pipeline = deviceMap.get(cacheKey);
   if (!pipeline) {
-    const module = device.createShaderModule({ code: shader });
+    const module = device.createShaderModule({ code });
     const computeStage: GPUProgrammableStage = { module, entryPoint, constants };
     pipeline = device.createComputePipeline({ layout: 'auto', compute: computeStage });
     deviceMap.set(cacheKey, pipeline);

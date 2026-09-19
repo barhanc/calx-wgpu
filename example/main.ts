@@ -1,7 +1,7 @@
 import {
   initDevice,
   isWebGPUSupported,
-  kernels,
+  shaders,
   Model,
   Tensor,
   WgpuExecutionContext,
@@ -105,7 +105,7 @@ runBtn.addEventListener('click', async () => {
       .setTensor('in2', 'float32', [1, 3], yData)
       .setScalar('alpha', 2.0)
       .setTensor('out', 'float32', [2, 3])
-      .record(kernels.add, ['in1', 'in2', 'alpha', 'out']);
+      .record(shaders.add, ['in1', 'in2', 'alpha', 'out']);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -171,7 +171,7 @@ runBtn.addEventListener('click', async () => {
       .setTensor('a', 'float32', [2, 3], aData)
       .setTensor('b', 'float32', [3, 2], bData)
       .setTensor('out', 'float32', [2, 2])
-      .record(kernels.mm, ['a', 'b', 'out']);
+      .record(shaders.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
@@ -214,7 +214,7 @@ runBtn.addEventListener('click', async () => {
       .setTensor('a', 'float32', [4, 4], aData4x4)
       .setTensor('b', 'float32', [4, 4], bData4x4)
       .setTensor('out', 'float32', [4, 4])
-      .record(kernels.mm, ['a', 'b', 'out']);
+      .record(shaders.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
@@ -285,7 +285,7 @@ runBtn.addEventListener('click', async () => {
       .setTensor('a', 'float32', [benchDim, benchDim], aFloats)
       .setTensor('b', 'float32', [benchDim, benchDim], bFloats)
       .setTensor('out', 'float32', [benchDim, benchDim])
-      .record(kernels.mm, ['a', 'b', 'out']);
+      .record(shaders.mm, ['a', 'b', 'out']);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
@@ -389,7 +389,7 @@ runBtn.addEventListener('click', async () => {
       .setTensor('a', 'float32', [oddM, oddK], aOddFloats)
       .setTensor('b', 'float32', [oddK, oddN], bOddFloats)
       .setTensor('out', 'float32', [oddM, oddN])
-      .record(kernels.mm, ['a', 'b', 'out']);
+      .record(shaders.mm, ['a', 'b', 'out']);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check

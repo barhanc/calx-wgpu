@@ -1,4 +1,4 @@
-import type { Kernel } from './kernel';
+import type { Shader } from './shader';
 import type { WgpuDispatch } from './dispatch';
 import { Tensor, type DType, type TypedArray } from './tensor';
 
@@ -157,14 +157,14 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Records a compute kernel dispatch into this context.
-   * @param kernel The compute kernel to execute.
+   * Records a compute shader dispatch into this context.
+   * @param shader The compute shader to execute.
    * @param args Positional argument IDs referring to entries in this context.
    * @returns This context instance.
    */
-  record<TArgs extends readonly PropertyKey[]>(kernel: Kernel<TArgs>, args: TArgs): this {
+  record<TArgs extends readonly PropertyKey[]>(shader: Shader<TArgs>, args: TArgs): this {
     if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
-    kernel.recordIn(this, args);
+    shader.recordIn(this, args);
     return this;
   }
 

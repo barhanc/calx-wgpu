@@ -1,9 +1,9 @@
 export * from './tensor';
 export * from './device';
 export * from './context';
-export * from './kernel';
+export * from './shader';
 export * from './dispatch';
 export * from './parser';
 export * from './model';
 
-export * from './kernels';
+export * from './shaders';

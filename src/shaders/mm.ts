@@ -1,8 +1,8 @@
-import type { Kernel } from '../kernel';
+import type { Shader } from '../shader';
 import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
-const NAME = 'aten.mm.default';
+const name = 'aten.mm.default';
 
 /**
  * WGSL compute shader for matrix multiplication with shared-memory tiling
@@ -211,11 +211,11 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   const out = ctx.getTensor(outId);
 
   if (a.dtype !== 'float32' || b.dtype !== 'float32' || out.dtype !== 'float32') {
-    throw new Error(`${NAME}: Only float32 tensors are currently supported`);
+    throw new Error(`${name}: Only float32 tensors are currently supported`);
   }
 
   if (a.shape.length !== 2 || b.shape.length !== 2 || out.shape.length !== 2) {
-    throw new Error(`${NAME}: Tensors must be 2D matrices`);
+    throw new Error(`${name}: Tensors must be 2D matrices`);
   }
 
   const [m, kA] = a.shape as [number, number];
@@ -223,11 +223,11 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   const [outM, outN] = out.shape as [number, number];
 
   if (kA !== kB) {
-    throw new Error(`${NAME}: Matrix inner dimensions must match (${kA} !== ${kB})`);
+    throw new Error(`${name}: Matrix inner dimensions must match (${kA} !== ${kB})`);
   }
 
   if (outM !== m || outN !== n) {
-    throw new Error(`${NAME}: Output shape [${outM}, ${outN}] !== expected [${m}, ${n}]`);
+    throw new Error(`${name}: Output shape [${outM}, ${outN}] !== expected [${m}, ${n}]`);
   }
 
   const device = ctx.device;
@@ -238,9 +238,9 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
 
   // Use vectorized 128-bit memory loads when K and N are divisible by 4
   const useVec4 = kA % 4 === 0 && n % 4 === 0;
-  const shader = useVec4 ? SHADER_VEC4 : SHADER_TILED;
+  const code = useVec4 ? SHADER_VEC4 : SHADER_TILED;
 
-  const bundle = createComputeBundle(device, shader, [
+  const bundle = createComputeBundle(device, code, [
     { binding: 0, buffer: a.buffer },
     { binding: 1, buffer: b.buffer },
     { binding: 2, buffer: out.buffer },
@@ -263,8 +263,8 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
  * selects the 128-bit vectorized `vec4<f32>` memory path when both K and N are multiples
  * of 4, falling back to the standard scalar tiled path for arbitrary dimensions.
  */
-export const mm: Kernel<MmArgs> = {
-  name: NAME,
-  wgsl: { tiled: SHADER_TILED, vec4: SHADER_VEC4 },
+export const mm: Shader<MmArgs, typeof name> = {
+  name,
+  code: { tiled: SHADER_TILED, vec4: SHADER_VEC4 },
   recordIn,
 };

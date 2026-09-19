@@ -1,11 +1,11 @@
-import type { Kernel } from '../kernel';
+import type { Shader } from '../shader';
 import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
 import { isBroadcastable } from './utils/broadcast';
 import { encodeTensorMeta, TENSOR_META_WGSL } from './utils/meta';
 
-const NAME = 'aten.add.Tensor';
+const name = 'aten.add.Tensor';
 
 /**
  * WGSL compute shader for binary addition with broadcast support.
@@ -85,10 +85,10 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
   const alpha = args.length === 4 ? ctx.getScalar(args[2]) : 1.0;
 
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
-    throw new Error(`${NAME}: Only float32 tensors are currently supported`);
+    throw new Error(`${name}: Only float32 tensors are currently supported`);
   }
   if (!isBroadcastable(in1.shape, out.shape) || !isBroadcastable(in2.shape, out.shape)) {
-    throw new Error(`${NAME}: Input shapes are not broadcastable to output shape`);
+    throw new Error(`${name}: Input shapes are not broadcastable to output shape`);
   }
 
   const outRank = out.shape.length;
@@ -132,8 +132,8 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
  * broadcasting (right-aligned, dimensions equal or 1, up to rank 8). Features an
  * automatic fast path when input and output shapes match.
  */
-export const add: Kernel<AddArgs> = {
-  name: NAME,
-  wgsl: SHADER,
+export const add: Shader<AddArgs, typeof name> = {
+  name,
+  code: SHADER,
   recordIn,
 };
