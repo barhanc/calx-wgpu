@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "example": "vite example",
-    "codegen:schema": "flatc --ts -o src/schema -I third-party/executorch/schema third-party/executorch/schema/scalar_type.fbs third-party/executorch/schema/program.fbs third-party/executorch/backends/vulkan/serialization/schema.fbs",
+    "codegen:schema": "flatc --ts -o src/generated -I third-party/executorch/schema third-party/executorch/schema/scalar_type.fbs third-party/executorch/schema/program.fbs third-party/executorch/backends/vulkan/serialization/schema.fbs",
     "format": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
