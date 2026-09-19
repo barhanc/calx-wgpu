@@ -17,6 +17,7 @@ export type DeviceOptions = {
 /**
  * Synchronously checks whether the current execution environment supports
  * WebGPU.
+ *
  * @returns True if WebGPU is available in the current environment.
  */
 export function isWebGPUSupported(): boolean {
@@ -29,6 +30,7 @@ export function isWebGPUSupported(): boolean {
  * Checks for WebGPU support, requests a suitable adapter with the requested
  * power preference, enables 16-bit float (`shader-f16`) and subgroup operations
  * (`subgroups`) when available, and requests the device.
+ *
  * @param options Optional configuration parameters for adapter and device
  * initialization.
  * @returns A promise that resolves to the initialized WebGPU device.

@@ -43,6 +43,7 @@ const pipelineCache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
 /**
  * Serializes pipeline override constants into a deterministic,
  * order-independent cache key string.
+ *
  * @param constants Pipeline override constants.
  * @returns Serialized key string.
  */
@@ -57,6 +58,7 @@ function serializeConstants(constants?: Record<string, number>): string {
 /**
  * Builds and caches a compute pipeline along with its bind group from a list of
  * bindings.
+ *
  * @param device WebGPU device instance.
  * @param code WGSL shader code string.
  * @param bindings List of buffer bindings for `@group(0)`.

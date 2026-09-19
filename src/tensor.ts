@@ -125,6 +125,7 @@ export class Tensor {
   /**
    * Copies data from a host TypedArray or existing GPUBuffer into this tensor's
    * storage buffer.
+   *
    * @param src Source TypedArray or GPUBuffer to copy from.
    * @returns This tensor instance.
    * @throws {Error} If source byte size does not match this tensor's byte length.
@@ -160,6 +161,7 @@ export class Tensor {
 
   /**
    * Reads raw bytes back from the GPU storage buffer into host memory.
+   *
    * @returns Raw byte buffer containing the tensor data.
    */
   async getData(): Promise<ArrayBuffer> {

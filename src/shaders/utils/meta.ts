@@ -40,6 +40,7 @@ const OFFSET_STRIDES = 12; // Byte offset 48 (48 / 4 = 12)
  * `TensorMeta` layout (ndim, numel, 8-element sizes, 8-element strides).
  *
  * If `targetRank` is provided, dimensions are right-aligned to match the broadcast output rank.
+ *
  * @param tensor The Tensor instance to encode.
  * @param targetRank Optional target rank to right-align dimensions for broadcasting.
  * @returns ArrayBuffer containing the 80-byte std140 uniform data.

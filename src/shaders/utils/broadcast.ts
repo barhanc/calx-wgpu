@@ -4,6 +4,7 @@
  * - Dimensions are compared from right to left (trailing dimensions first).
  * - Two dimensions are compatible if they are equal or if one of them is 1.
  * - Input rank cannot exceed the target rank.
+ *
  * @param shape The shape to check.
  * @param targetShape The destination broadcast shape.
  * @returns True if `shape` can be broadcast to `targetShape`.
@@ -25,6 +26,7 @@ export function isBroadcastable(shape: readonly number[], targetShape: readonly 
 /**
  * Computes the broadcasted output shape of two tensor shapes.
  * Returns undefined if the shapes are incompatible under NumPy / PyTorch broadcasting rules.
+ *
  * @param a First shape.
  * @param b Second shape.
  * @returns Broadcasted shape array, or undefined if incompatible.

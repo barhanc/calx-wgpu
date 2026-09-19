@@ -41,7 +41,7 @@ export default [
       'jsdoc/require-yields-type': 'off',
       'jsdoc/require-yields-description': 'warn',
       'jsdoc/check-tag-names': ['error', { definedTags: ['category', 'property', 'internal'] }],
-      'jsdoc/tag-lines': ['error', 'any'],
+      'jsdoc/tag-lines': ['error', 'any', { startLines: 1 }],
       'jsdoc/require-returns': 'off',
       'jsdoc/require-returns-description': 'off',
     },

@@ -202,6 +202,7 @@ export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: Property
 
 /**
  * Internal dispatch builder for `aten::mm.default`.
+ *
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */

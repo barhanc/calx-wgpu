@@ -20,6 +20,7 @@ export class WgpuExecutionContext {
 
   /**
    * Constructs a new WgpuExecutionContext.
+   *
    * @param device The WebGPU device instance.
    */
   constructor(device: GPUDevice) {
@@ -34,6 +35,7 @@ export class WgpuExecutionContext {
   /**
    * Transfers ownership of a buffer to the context to ensure it remains
    * allocated for the model lifetime and is destroyed on context disposal.
+   *
    * @param buffer The GPUBuffer to take ownership of.
    */
   #ownBuffer(buffer: GPUBuffer): void {
@@ -42,6 +44,7 @@ export class WgpuExecutionContext {
 
   /**
    * Retrieves a tensor value by its context value ID.
+   *
    * @param id Identifier of the value in the context.
    * @returns The Tensor instance.
    */
@@ -58,6 +61,7 @@ export class WgpuExecutionContext {
    *
    * Accepts either an existing {@link Tensor} instance, or attributes (`dtype`,
    * `shape`, `src?`) to instantiate and track a new context-owned Tensor.
+   *
    * @param id Identifier of the value in the context.
    * @param tensorOrDtype An existing Tensor, or the DType of a new tensor to create.
    * @param shape Dimensions of the tensor when creating a new one.
@@ -89,6 +93,7 @@ export class WgpuExecutionContext {
 
   /**
    * Retrieves a scalar constant by its context value ID.
+   *
    * @param id Identifier of the scalar in the context.
    * @returns The numeric value.
    */
@@ -102,6 +107,7 @@ export class WgpuExecutionContext {
 
   /**
    * Sets or replaces a scalar constant in the context.
+   *
    * @param id Identifier of the scalar.
    * @param val The numeric value.
    * @returns This context instance.
@@ -114,6 +120,7 @@ export class WgpuExecutionContext {
   /**
    * Creates an empty WebGPU storage buffer whose lifetime is managed by this
    * context.
+   *
    * @param size Size in bytes to allocate.
    * @returns The newly allocated and owned GPUBuffer with STORAGE | COPY_SRC | COPY_DST usage.
    */
@@ -128,6 +135,7 @@ export class WgpuExecutionContext {
   /**
    * Creates and populates a WebGPU uniform buffer whose lifetime is managed
    * by this context.
+   *
    * @param data Binary data to copy into the uniform buffer.
    * @returns The newly allocated and owned GPUBuffer.
    */
@@ -149,6 +157,7 @@ export class WgpuExecutionContext {
 
   /**
    * Records a compute dispatch into the context execution queue.
+   *
    * @param dispatch The dispatch descriptor to record.
    */
   addDispatch(dispatch: WgpuDispatch): void {
@@ -158,6 +167,7 @@ export class WgpuExecutionContext {
 
   /**
    * Records a compute shader dispatch into this context.
+   *
    * @param shader The compute shader to execute.
    * @param args Positional argument IDs referring to entries in this context.
    * @returns This context instance.
