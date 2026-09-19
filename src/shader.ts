@@ -3,7 +3,8 @@ import type { WgpuExecutionContext } from './context';
 /**
  * Represents a GPU compute shader in the ExecuTorch WebGPU execution engine.
  *
- * @typeParam TArgs The tuple schema of value IDs accepted by this shader's {@link recordIn} method.
+ * @typeParam TArgs The tuple schema of value IDs accepted by this shader's
+ * {@link recordIn} method.
  * @typeParam TName Literal string type of the operator name.
  */
 export type Shader<

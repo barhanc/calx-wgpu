@@ -49,10 +49,14 @@ const pipelineCache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
  */
 function serializeConstants(constants?: Record<string, number>): string {
   if (!constants) return '';
+
   const entries = Object.entries(constants);
   if (entries.length === 0) return '';
-  entries.sort(([a], [b]) => a.localeCompare(b));
-  return entries.map(([k, v]) => `${k}=${v}`).join(';');
+
+  return entries
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(';');
 }
 
 /**
