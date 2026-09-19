@@ -1,4 +1,11 @@
-import { initDevice, isWebGPUSupported, kernels, tensor, WgpuExecutionContext } from '../src';
+import {
+  initDevice,
+  isWebGPUSupported,
+  kernels,
+  Model,
+  Tensor,
+  WgpuExecutionContext,
+} from '../src';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const runBtn = document.getElementById('run-btn') as HTMLButtonElement;
@@ -35,7 +42,7 @@ runBtn.addEventListener('click', async () => {
     log(`   Data:  [${Array.from(rawDataA).join(', ')}]`);
 
     log('3. Allocating WebGPU Tensor (uploading to VRAM)...');
-    const tensorA = tensor('float32', shapeA, device, rawDataA);
+    const tensorA = new Tensor('float32', shapeA, device, rawDataA);
     log(`   VRAM buffer allocated (size: ${tensorA.buffer.size} bytes)`);
 
     log('4. Reading data back from GPU via tensorA.getData()...');
@@ -67,7 +74,7 @@ runBtn.addEventListener('click', async () => {
     log(`   External GPUBuffer created (size: ${externalBuffer.size} bytes)`);
 
     log('6. Wrapping external GPUBuffer into Tensor...');
-    const tensorB = tensor('int32', shapeB, device, externalBuffer);
+    const tensorB = new Tensor('int32', shapeB, device, externalBuffer);
     log(
       `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer})`
     );
@@ -92,9 +99,9 @@ runBtn.addEventListener('click', async () => {
     // x shape: [2, 3], y shape: [1, 3] -> broadcast output: [2, 3]
     const xData = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     const yData = new Float32Array([10.0, 20.0, 30.0]);
-    const tensorX = tensor('float32', [2, 3], device, xData);
-    const tensorY = tensor('float32', [1, 3], device, yData);
-    const tensorOut = tensor('float32', [2, 3], device);
+    const tensorX = new Tensor('float32', [2, 3], device, xData);
+    const tensorY = new Tensor('float32', [1, 3], device, yData);
+    const tensorOut = new Tensor('float32', [2, 3], device);
 
     const ctx = new WgpuExecutionContext(device);
     ctx.setTensor(0, tensorX);
@@ -102,8 +109,8 @@ runBtn.addEventListener('click', async () => {
     ctx.setScalar(2, 2.0); // alpha = 2.0
     ctx.setTensor(3, tensorOut);
 
-    // Build and record dispatch into context [in1, in2, out, alpha]
-    kernels.add.attachTo(ctx, [0, 1, 3, 2]);
+    // Build and record dispatch into context [in1, in2, alpha, out]
+    kernels.add.attachTo(ctx, [0, 1, 2, 3]);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -145,9 +152,9 @@ runBtn.addEventListener('click', async () => {
     //      [9,  1],
     //      [2,  3]]
     const bData = new Float32Array([7.0, 8.0, 9.0, 1.0, 2.0, 3.0]);
-    const tensorMatA = tensor('float32', [2, 3], device, aData);
-    const tensorMatB = tensor('float32', [3, 2], device, bData);
-    const tensorMatOut = tensor('float32', [2, 2], device);
+    const tensorMatA = new Tensor('float32', [2, 3], device, aData);
+    const tensorMatB = new Tensor('float32', [3, 2], device, bData);
+    const tensorMatOut = new Tensor('float32', [2, 2], device);
 
     const mmCtx = new WgpuExecutionContext(device);
     mmCtx.setTensor(0, tensorMatA);
@@ -194,9 +201,9 @@ runBtn.addEventListener('click', async () => {
     const aData4x4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     // B = 4x4 matrix [1..16]
     const bData4x4 = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
-    const tensorVecA = tensor('float32', [4, 4], device, aData4x4);
-    const tensorVecB = tensor('float32', [4, 4], device, bData4x4);
-    const tensorVecOut = tensor('float32', [4, 4], device);
+    const tensorVecA = new Tensor('float32', [4, 4], device, aData4x4);
+    const tensorVecB = new Tensor('float32', [4, 4], device, bData4x4);
+    const tensorVecOut = new Tensor('float32', [4, 4], device);
 
     const vecCtx = new WgpuExecutionContext(device);
     vecCtx.setTensor(0, tensorVecA);
@@ -272,9 +279,9 @@ runBtn.addEventListener('click', async () => {
     }
 
     log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
-    const benchTensorA = tensor('float32', [benchDim, benchDim], device, aFloats);
-    const benchTensorB = tensor('float32', [benchDim, benchDim], device, bFloats);
-    const benchTensorOut = tensor('float32', [benchDim, benchDim], device);
+    const benchTensorA = new Tensor('float32', [benchDim, benchDim], device, aFloats);
+    const benchTensorB = new Tensor('float32', [benchDim, benchDim], device, bFloats);
+    const benchTensorOut = new Tensor('float32', [benchDim, benchDim], device);
 
     const benchCtx = new WgpuExecutionContext(device);
     benchCtx.setTensor(0, benchTensorA);
@@ -383,9 +390,9 @@ runBtn.addEventListener('click', async () => {
     }
 
     log(`22. Uploading 2047x2047 test matrices to WebGPU VRAM...`);
-    const oddTensorA = tensor('float32', [oddM, oddK], device, aOddFloats);
-    const oddTensorB = tensor('float32', [oddK, oddN], device, bOddFloats);
-    const oddTensorOut = tensor('float32', [oddM, oddN], device);
+    const oddTensorA = new Tensor('float32', [oddM, oddK], device, aOddFloats);
+    const oddTensorB = new Tensor('float32', [oddK, oddN], device, bOddFloats);
+    const oddTensorOut = new Tensor('float32', [oddM, oddN], device);
 
     const oddCtx = new WgpuExecutionContext(device);
     oddCtx.setTensor(0, oddTensorA);
@@ -447,6 +454,42 @@ runBtn.addEventListener('click', async () => {
     oddTensorA.destroy();
     oddTensorB.destroy();
     oddTensorOut.destroy();
+
+    log('\n--- Test H: End-to-End ExecuTorch .pte Model Execution ---');
+    log('14. Fetching and loading simple_add.pte model...');
+    const pteResponse = await fetch('/simple_add.pte');
+    if (!pteResponse.ok) {
+      throw new Error(`Failed to fetch /simple_add.pte: ${pteResponse.statusText}`);
+    }
+    const pteArrayBuffer = await pteResponse.arrayBuffer();
+    const model = Model.load(device, pteArrayBuffer);
+    log(`    Available methods in .pte: [${model.methodNames.join(', ')}]`);
+
+    const modelIn1Data = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+    const modelIn2Data = new Float32Array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]);
+    const modelIn1 = new Tensor('float32', [2, 4], device, modelIn1Data);
+    const modelIn2 = new Tensor('float32', [2, 4], device, modelIn2Data);
+
+    log('15. Executing model.forward(in1, in2)...');
+    const outputs = await model.forward(modelIn1, modelIn2);
+    const outTensor = outputs[0] as Tensor;
+    const modelOutBytes = await outTensor.getData();
+    const modelOutFloats = new Float32Array(modelOutBytes);
+    log(`    Output shape: [${outTensor.shape.join(', ')}]`);
+    log(`    Result: [${Array.from(modelOutFloats).join(', ')}]`);
+
+    const expectedAdd = modelIn1Data.map((v, i) => v + modelIn2Data[i]);
+    const matchesModel = modelOutFloats.every((v, i) => Math.abs(v - expectedAdd[i]) < 1e-5);
+    if (matchesModel) {
+      log('    ✅ Test H PASSED: ExecuTorch .pte model executed with 100% accuracy!');
+    } else {
+      log('    ❌ Test H FAILED: Model output does not match expected add!');
+    }
+
+    modelIn1.destroy();
+    modelIn2.destroy();
+    model.dispose();
+    log('    Model disposed.');
 
     log('\n🎉 All checks completed successfully!');
   } catch (err) {

@@ -284,11 +284,6 @@ function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
  * (32x32 output tile per workgroup, each thread computing a 4x4 sub-tile). Automatically
  * selects the 128-bit vectorized `vec4<f32>` memory path when both K and N are multiples
  * of 4, falling back to the standard scalar tiled path for arbitrary dimensions.
- *
- * @example
- * ```ts
- * kernels.mm.attachTo(ctx, { in1: 0, in2: 1, out: 2 });
- * ```
  */
 export const mm: Kernel<MmArgs> = {
   name: NAME,

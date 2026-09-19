@@ -66,11 +66,11 @@ fn main(
 
 /**
  * Positional argument tuple for `aten::add.Tensor`:
- * `[in1, in2, out]` or `[in1, in2, out, alpha]`
+ * `[in1, in2, alpha, out]` or `[in1, in2, out]`
  */
 export type AddArgs =
   | readonly [in1: number, in2: number, out: number]
-  | readonly [in1: number, in2: number, out: number, alpha: number];
+  | readonly [in1: number, in2: number, alpha: number, out: number];
 
 /**
  * Internal dispatch builder for `aten::add.Tensor`.
@@ -78,11 +78,10 @@ export type AddArgs =
  * @param args Positional argument tuple for the operator.
  */
 function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
-  const [in1Id, in2Id, outId, alphaId] = args;
-  const in1 = ctx.getTensor(in1Id);
-  const in2 = ctx.getTensor(in2Id);
-  const out = ctx.getTensor(outId);
-  const alpha = alphaId !== undefined ? ctx.getScalar(alphaId) : 1.0;
+  const in1 = ctx.getTensor(args[0]);
+  const in2 = ctx.getTensor(args[1]);
+  const out = ctx.getTensor(args[args.length - 1]);
+  const alpha = args.length === 4 ? ctx.getScalar(args[2]) : 1.0;
 
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${NAME}: Only float32 tensors are currently supported`);
@@ -135,11 +134,6 @@ function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
  * Computes elementwise `output = input1 + alpha * input2` with NumPy/PyTorch-style
  * broadcasting (right-aligned, dimensions equal or 1, up to rank 8). Features an
  * automatic fast path when input and output shapes match.
- *
- * @example
- * ```ts
- * kernels.add.attachTo(ctx, { in1: 0, in2: 1, out: 3, alpha: 2 });
- * ```
  */
 export const add: Kernel<AddArgs> = {
   name: NAME,

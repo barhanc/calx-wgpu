@@ -4,33 +4,14 @@
 export type DType = 'float32' | 'float16' | 'int32' | 'int8' | 'uint8' | 'bool';
 
 /**
- * A WebGPU-backed Tensor instance.
- *
- * Encapsulates an allocated `GPUBuffer` in device VRAM along with its metadata
- * (`dtype`, `shape`, `numel`). Use {@link Tensor.getData} to read raw bytes
- * back into host memory, or {@link Tensor.destroy} to release GPU memory.
+ * Supported typed arrays that can be uploaded to a Tensor.
  */
-export type Tensor = {
-  /** The element data type of the tensor. */
-  readonly dtype: DType;
-  /** Total number of elements across all dimensions. */
-  readonly numel: number;
-  /** The dimensions of the tensor. */
-  readonly shape: readonly number[];
-  /** The WebGPU device that owns this tensor's buffer. */
-  readonly device: GPUDevice;
-  /** The underlying WebGPU storage buffer in VRAM. */
-  readonly buffer: GPUBuffer;
+export type TypedArray = Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array;
 
-  /**
-   * Reads raw bytes back from the GPU storage buffer into host memory.
-   * @returns Raw byte buffer containing the tensor data.
-   */
-  readonly getData: () => Promise<ArrayBuffer>;
-
-  /** Destroys and releases the underlying GPU buffer. */
-  readonly destroy: () => void;
-};
+/**
+ * Maximum tensor rank supported by WebGPU kernels (std140 layout limit).
+ */
+export const MAX_NDIM = 8;
 
 // prettier-ignore
 const DTYPE_BYTESIZE: Record<DType, number> = {
@@ -39,80 +20,127 @@ const DTYPE_BYTESIZE: Record<DType, number> = {
   uint8:   1, bool:    1,
 } as const;
 
-// prettier-ignore
-const STORAGE_BUFFER_USAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
+const STORAGE_BUFFER_USAGE =
+  GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
 /**
- * Maximum tensor rank supported by WebGPU kernels (std140 layout limit).
- */
-export const MAX_NDIM = 8;
-
-/**
- * Creates a WebGPU-backed Tensor.
+ * A WebGPU-backed Tensor instance.
  *
- * If `source` is omitted, allocates an uninitialized storage buffer in device VRAM.
- * If `source` is a `TypedArray`, uploads data to a newly allocated GPU storage buffer.
- * If `source` is an existing `GPUBuffer`, wraps it zero-copy without allocating new memory.
- *
- * @param dtype Data type of elements.
- * @param shape Dimensions of the tensor (rank <= 8).
- * @param device The WebGPU device.
- * @param source Optional initial host data or existing GPUBuffer to wrap.
- * @returns A newly created Tensor closure bundle.
+ * Encapsulates an allocated `GPUBuffer` in device VRAM along with its metadata
+ * (`dtype`, `shape`, `numel`). Use {@link Tensor.getData} to read raw bytes
+ * back into host memory, or {@link Tensor.destroy} to release GPU memory.
  */
-export function tensor(
-  dtype: DType,
-  shape: readonly number[],
-  device: GPUDevice,
-  source?: GPUBuffer | Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array
-): Tensor {
-  if (shape.length > MAX_NDIM) {
-    throw new Error(`Tensor rank ${shape.length} exceeds maximum rank of ${MAX_NDIM}`);
-  }
-  if (shape.some((dim) => dim <= 0 || !Number.isInteger(dim))) {
-    throw new Error('Tensor dimensions must be positive integers');
-  }
+export class Tensor {
+  readonly #dtype: DType;
+  readonly #numel: number;
+  readonly #shape: readonly number[];
+  readonly #device: GPUDevice;
+  readonly #buffer: GPUBuffer;
 
-  const numel = shape.reduce((a, b) => a * b, 1);
-  const byteLength = numel * DTYPE_BYTESIZE[dtype];
-  const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
+  constructor(
+    dtype: DType,
+    shape: readonly number[],
+    device: GPUDevice,
+    source?: GPUBuffer | TypedArray
+  ) {
+    if (shape.length > MAX_NDIM) {
+      throw new Error(`Tensor rank ${shape.length} exceeds maximum rank of ${MAX_NDIM}`);
+    }
+    if (shape.some((dim) => dim <= 0 || !Number.isInteger(dim))) {
+      throw new Error('Tensor dimensions must be positive integers');
+    }
 
-  let buffer: GPUBuffer;
-  if (!source) {
-    buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
-  } else if (source instanceof GPUBuffer) {
-    if (source.size < byteLength) {
-      throw new Error(`GPUBuffer size (${source.size}B) < required tensor size (${byteLength}B)`);
+    this.#dtype = dtype;
+    this.#shape = shape;
+    this.#numel = shape.reduce((a, b) => a * b, 1);
+    this.#device = device;
+
+    const byteLength = this.#numel * DTYPE_BYTESIZE[dtype];
+    const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
+
+    if (source === undefined) {
+      this.#buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
+      return;
     }
-    if ((source.usage & GPUBufferUsage.STORAGE) === 0) {
-      throw new Error('GPUBuffer must have GPUBufferUsage.STORAGE flag');
+
+    if (source instanceof GPUBuffer) {
+      if (source.size < byteLength) {
+        throw new Error(`GPUBuffer size (${source.size}B) < required tensor size (${byteLength}B)`);
+      }
+
+      if ((source.usage & GPUBufferUsage.STORAGE) === 0) {
+        throw new Error('GPUBuffer must have GPUBufferUsage.STORAGE flag');
+      }
+
+      this.#buffer = source;
+      return;
     }
-    buffer = source;
-  } else {
+
     if (source.byteLength !== byteLength) {
       throw new Error(`Source bytes (${source.byteLength}B) !== tensor size (${byteLength}B)`);
     }
-    buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
-    device.queue.writeBuffer(buffer, 0, source.buffer, source.byteOffset, byteLength);
+
+    this.#buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
+    device.queue.writeBuffer(this.#buffer, 0, source.buffer, source.byteOffset, byteLength);
   }
 
-  const attributes = { dtype, shape, numel, device, buffer };
+  /** The element data type of the tensor. */
+  get dtype(): DType {
+    return this.#dtype;
+  }
 
-  const destroy = () => buffer.destroy();
+  /** Total number of elements across all dimensions. */
+  get numel(): number {
+    return this.#numel;
+  }
 
-  const getData = async (): Promise<ArrayBuffer> => {
-    const encoder = device.createCommandEncoder();
-    const staging = device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
+  /** The dimensions of the tensor. */
+  get shape(): readonly number[] {
+    return this.#shape;
+  }
+
+  /** The WebGPU device that owns this tensor's buffer. */
+  get device(): GPUDevice {
+    return this.#device;
+  }
+
+  /** The underlying WebGPU storage buffer in VRAM. */
+  get buffer(): GPUBuffer {
+    return this.#buffer;
+  }
+
+  /**
+   * The total byte size of the tensor data.
+   */
+  get byteLength(): number {
+    return this.#numel * DTYPE_BYTESIZE[this.#dtype];
+  }
+
+  /**
+   * Reads raw bytes back from the GPU storage buffer into host memory.
+   *
+   * @returns Raw byte buffer containing the tensor data.
+   */
+  async getData(): Promise<ArrayBuffer> {
+    const alignedSize = Math.max(16, Math.ceil(this.byteLength / 4) * 4);
+    const encoder = this.#device.createCommandEncoder();
+    const staging = this.#device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
+
     try {
-      encoder.copyBufferToBuffer(buffer, 0, staging, 0, alignedSize);
-      device.queue.submit([encoder.finish()]);
+      encoder.copyBufferToBuffer(this.#buffer, 0, staging, 0, alignedSize);
+      this.#device.queue.submit([encoder.finish()]);
       await staging.mapAsync(GPUMapMode.READ);
-      return staging.getMappedRange(0, byteLength).slice(0);
+      return staging.getMappedRange(0, this.byteLength).slice(0);
     } finally {
       staging.destroy();
     }
-  };
+  }
 
-  return { ...attributes, getData, destroy } as Tensor;
+  /**
+   * Destroys and releases the underlying GPU buffer.
+   */
+  destroy(): void {
+    this.#buffer.destroy();
+  }
 }

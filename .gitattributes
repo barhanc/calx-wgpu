@@ -1,0 +1,4 @@
+# Mark example and benchmark files as vendored / generated so GitHub doesn't count them in language statistics
+example/** linguist-vendored
+example/** linguist-documentation
+*.pte binary

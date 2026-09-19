@@ -3,5 +3,7 @@ export * from './device';
 export * from './context';
 export * from './kernel';
 export * from './dispatch';
+export * from './parser';
+export * from './model';
 
 export * from './kernels';
