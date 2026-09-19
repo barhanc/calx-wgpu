@@ -12,20 +12,20 @@ export type Shader<
   TName extends string = string,
 > = {
   /**
-   * Canonical PyTorch / ExecuTorch operator identifier (e.g. `'aten.add.Tensor'`).
+   * Canonical PyTorch / ExecuTorch operator identifier.
    */
   readonly name: TName;
 
   /**
    * Raw WebGPU Shading Language source code, either as a single shader string
-   * or a dictionary of named shader variants (e.g. `{ tiled: string, vec4: string }`).
+   * or a dictionary of named shader variants.
    */
   readonly code: string | Record<string, string>;
 
   /**
-   * Dispatches and records the operator's compute pass into the execution context.
-   * Validates input/output tensors, allocates uniform buffers, compiles or retrieves
-   * cached pipelines, and records the dispatch.
+   * Dispatches and records the operator's compute pass into the execution
+   * context. Validates input/output tensors, allocates uniform buffers,
+   * compiles or retrieves cached pipelines, and records the dispatch.
    *
    * @param ctx The execution context to record dispatches into.
    * @param args Positional value IDs of inputs and outputs for the operator.
