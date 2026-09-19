@@ -5,7 +5,7 @@ import jsdocPlugin from 'eslint-plugin-jsdoc';
 
 export default [
   {
-    ignores: ['node_modules/', 'dist/', 'third-party/', '*.log', 'schemas/generated/'],
+    ignores: ['node_modules/', 'dist/', 'third-party/', '*.log', 'src/schema/'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],
