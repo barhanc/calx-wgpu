@@ -7,8 +7,8 @@ const STORAGE_BUFFER_USAGE =
   GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
 /**
- * Execution context that manages GPU tensors, uniform buffers,
- * and the sequence of recorded kernel dispatches.
+ * Execution context that manages GPU tensors, buffers, and the sequence of
+ * recorded kernel dispatches.
  */
 export class WgpuExecutionContext {
   readonly #device: GPUDevice;
@@ -16,6 +16,7 @@ export class WgpuExecutionContext {
   readonly #scalars = new Map<PropertyKey, number>();
   readonly #dispatches: WgpuDispatch[] = [];
   readonly #ownedBuffers = new Set<GPUBuffer>();
+  #destroyed = false;
 
   /**
    * Constructs a new WgpuExecutionContext.
@@ -28,6 +29,15 @@ export class WgpuExecutionContext {
   /** The WebGPU device used by this context. */
   get device(): GPUDevice {
     return this.#device;
+  }
+
+  /**
+   * Transfers ownership of a buffer to the context to ensure it remains
+   * allocated for the model lifetime and is destroyed on context disposal.
+   * @param buffer The GPUBuffer to take ownership of.
+   */
+  #ownBuffer(buffer: GPUBuffer): void {
+    this.#ownedBuffers.add(buffer);
   }
 
   /**
@@ -73,7 +83,7 @@ export class WgpuExecutionContext {
     }
 
     const t = new Tensor(v, shape, this.#device, src);
-    this.ownBuffer(t.buffer);
+    this.#ownBuffer(t.buffer);
     this.#tensors.set(id, t);
     return this;
   }
@@ -103,15 +113,17 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Creates an empty WebGPU storage buffer whose lifetime is managed by this context.
+   * Creates an empty WebGPU storage buffer whose lifetime is managed by this
+   * context.
    *
    * @param size Size in bytes to allocate.
    * @returns The newly allocated and owned GPUBuffer with STORAGE | COPY_SRC | COPY_DST usage.
    */
   storageBuffer(size: number): GPUBuffer {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     const alignedSize = Math.max(4, Math.ceil(size / 4) * 4);
     const buffer = this.#device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
-    this.ownBuffer(buffer);
+    this.#ownBuffer(buffer);
     return buffer;
   }
 
@@ -123,6 +135,7 @@ export class WgpuExecutionContext {
    * @returns The newly allocated and owned GPUBuffer.
    */
   uniformBuffer(data: ArrayBufferView | ArrayBuffer): GPUBuffer {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     const byteLength = data.byteLength;
     const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
     const buffer = this.#device.createBuffer({ size: alignedSize, usage: UNIFORM_BUFFER_USAGE });
@@ -133,7 +146,7 @@ export class WgpuExecutionContext {
       this.#device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, byteLength);
     }
 
-    this.ownBuffer(buffer);
+    this.#ownBuffer(buffer);
     return buffer;
   }
 
@@ -142,16 +155,8 @@ export class WgpuExecutionContext {
    * @param dispatch The dispatch descriptor to record.
    */
   addDispatch(dispatch: WgpuDispatch): void {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     this.#dispatches.push(dispatch);
-  }
-
-  /**
-   * Transfers ownership of a buffer to the context to ensure it remains
-   * allocated for the model lifetime and is destroyed on context disposal.
-   * @param buffer The GPUBuffer to take ownership of.
-   */
-  ownBuffer(buffer: GPUBuffer): void {
-    this.#ownedBuffers.add(buffer);
   }
 
   /**
@@ -162,6 +167,7 @@ export class WgpuExecutionContext {
    * @returns This context instance.
    */
   record<TArgs extends readonly PropertyKey[]>(kernel: Kernel<TArgs>, args: TArgs): this {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     kernel.recordIn(this, args);
     return this;
   }
@@ -170,6 +176,7 @@ export class WgpuExecutionContext {
    * Encodes all recorded dispatches into a single command buffer and submits to the GPU queue.
    */
   submit(): void {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     if (this.#dispatches.length === 0) return;
 
     const encoder = this.#device.createCommandEncoder();
@@ -194,6 +201,7 @@ export class WgpuExecutionContext {
    * while keeping registered tensors, scalars, and owned buffers intact.
    */
   reset(): void {
+    if (this.#destroyed) throw new Error('WgpuExecutionContext is destroyed');
     this.#dispatches.length = 0;
   }
 
@@ -201,6 +209,8 @@ export class WgpuExecutionContext {
    * Destroys all owned buffers and releases resources.
    */
   destroy(): void {
+    if (this.#destroyed) return;
+    this.#destroyed = true;
     for (const buffer of this.#ownedBuffers) {
       buffer.destroy();
     }

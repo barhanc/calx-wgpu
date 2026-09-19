@@ -133,6 +133,27 @@ runBtn.addEventListener('click', async () => {
       );
     }
 
+    log('10b. Re-executing context without recreating: updating in1 data and submitting again...');
+    const xData2 = new Float32Array([100.0, 200.0, 300.0, 400.0, 500.0, 600.0]);
+    ctx.getTensor('in1').setData(xData2);
+    ctx.submit();
+    await device.queue.onSubmittedWorkDone();
+
+    const outBytes2 = await ctx.getTensor('out').getData();
+    const outFloats2 = new Float32Array(outBytes2);
+    log(`   Re-run Result: [${Array.from(outFloats2).join(', ')}]`);
+
+    // Expected: [100 + 20, 200 + 40, 300 + 60, 400 + 20, 500 + 40, 600 + 60] = [120, 240, 360, 420, 540, 660]
+    const expected2 = [120.0, 240.0, 360.0, 420.0, 540.0, 660.0];
+    const matchesC2 = expected2.every((val, idx) => Math.abs(val - outFloats2[idx]) < 1e-4);
+    if (matchesC2) {
+      log('   ✅ Context re-execution PASSED: ran successfully with updated data on same context!');
+    } else {
+      log(
+        `   ❌ Context re-execution FAILED: Expected [${expected2.join(', ')}] but got [${Array.from(outFloats2).join(', ')}]`
+      );
+    }
+
     ctx.destroy();
 
     log('\n--- Test D: Context Execution of aten.mm.default (Tiled GEMM) ---');

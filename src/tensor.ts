@@ -41,6 +41,7 @@ export class Tensor {
   readonly #shape: readonly number[];
   readonly #device: GPUDevice;
   readonly #buffer: GPUBuffer;
+  #destroyed = false;
 
   constructor(
     dtype: DType,
@@ -117,7 +118,7 @@ export class Tensor {
   /**
    * The total byte size of the tensor data.
    */
-  get byteLength(): number {
+  get nbytes(): number {
     return this.#numel * DTYPE_BYTESIZE[this.#dtype];
   }
 
@@ -130,10 +131,15 @@ export class Tensor {
    * @throws {Error} If source byte size does not match this tensor's byte length.
    */
   setData(src: GPUBuffer | TypedArray): this {
-    const byteLength = this.byteLength;
+    if (this.#destroyed) {
+      throw new Error('Tensor is destroyed');
+    }
+
+    const nbytes = this.nbytes;
+
     if (src instanceof GPUBuffer) {
-      if (src.size < byteLength) {
-        throw new Error(`GPUBuffer size (${src.size}B) < tensor size (${byteLength}B)`);
+      if (src.size < nbytes) {
+        throw new Error(`GPUBuffer size (${src.size}B) < tensor size (${nbytes}B)`);
       }
 
       if ((src.usage & GPUBufferUsage.COPY_SRC) === 0) {
@@ -141,15 +147,15 @@ export class Tensor {
       }
 
       const encoder = this.#device.createCommandEncoder();
-      encoder.copyBufferToBuffer(src, 0, this.#buffer, 0, byteLength);
+      encoder.copyBufferToBuffer(src, 0, this.#buffer, 0, nbytes);
       this.#device.queue.submit([encoder.finish()]);
       return this;
     }
 
-    if (src.byteLength !== byteLength) {
-      throw new Error(`Source bytes (${src.byteLength}B) !== tensor byteLength (${byteLength}B)`);
+    if (src.byteLength !== nbytes) {
+      throw new Error(`Source bytes (${src.byteLength}B) !== tensor byte size (${nbytes}B)`);
     }
-    this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
+    this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, nbytes);
     return this;
   }
 
@@ -159,15 +165,21 @@ export class Tensor {
    * @returns Raw byte buffer containing the tensor data.
    */
   async getData(): Promise<ArrayBuffer> {
-    const byteLength = this.byteLength;
-    const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
+    if (this.#destroyed) {
+      throw new Error('Tensor is destroyed');
+    }
+
+    const nbytes = this.nbytes;
+    const alignedSize = Math.max(16, Math.ceil(nbytes / 4) * 4);
+
     const encoder = this.#device.createCommandEncoder();
     const staging = this.#device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
+
     try {
       encoder.copyBufferToBuffer(this.#buffer, 0, staging, 0, alignedSize);
       this.#device.queue.submit([encoder.finish()]);
       await staging.mapAsync(GPUMapMode.READ);
-      return staging.getMappedRange(0, byteLength).slice(0);
+      return staging.getMappedRange(0, nbytes).slice(0);
     } finally {
       staging.destroy();
     }
@@ -177,6 +189,8 @@ export class Tensor {
    * Destroys and releases the underlying GPU buffer.
    */
   destroy(): void {
+    if (this.#destroyed) return;
+    this.#destroyed = true;
     this.#buffer.destroy();
   }
 }
