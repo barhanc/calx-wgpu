@@ -57,10 +57,9 @@ function serializeConstants(constants?: Record<string, number>): string {
 /**
  * Builds and caches a compute pipeline along with its bind group from a list of
  * bindings.
- *
  * @param device WebGPU device instance.
  * @param shader WGSL shader code string.
- * @param bindings List of buffer bindings for @group(0).
+ * @param bindings List of buffer bindings for `@group(0)`.
  * @param constants Optional pipeline override constants.
  * @param entryPoint Shader entry point function name (default: 'main').
  * @returns The compiled pipeline and its matching bind group.

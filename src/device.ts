@@ -29,10 +29,8 @@ export function isWebGPUSupported(): boolean {
  * Checks for WebGPU support, requests a suitable adapter with the requested
  * power preference, enables 16-bit float (`shader-f16`) and subgroup operations
  * (`subgroups`) when available, and requests the device.
- *
  * @param options Optional configuration parameters for adapter and device
  * initialization.
- *
  * @returns A promise that resolves to the initialized WebGPU device.
  */
 export async function initDevice(options: DeviceOptions = {}): Promise<GPUDevice> {

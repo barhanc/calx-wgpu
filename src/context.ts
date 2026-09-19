@@ -58,7 +58,6 @@ export class WgpuExecutionContext {
    *
    * Accepts either an existing {@link Tensor} instance, or attributes (`dtype`,
    * `shape`, `src?`) to instantiate and track a new context-owned Tensor.
-   *
    * @param id Identifier of the value in the context.
    * @param tensorOrDtype An existing Tensor, or the DType of a new tensor to create.
    * @param shape Dimensions of the tensor when creating a new one.
@@ -115,7 +114,6 @@ export class WgpuExecutionContext {
   /**
    * Creates an empty WebGPU storage buffer whose lifetime is managed by this
    * context.
-   *
    * @param size Size in bytes to allocate.
    * @returns The newly allocated and owned GPUBuffer with STORAGE | COPY_SRC | COPY_DST usage.
    */
@@ -130,7 +128,6 @@ export class WgpuExecutionContext {
   /**
    * Creates and populates a WebGPU uniform buffer whose lifetime is managed
    * by this context.
-   *
    * @param data Binary data to copy into the uniform buffer.
    * @returns The newly allocated and owned GPUBuffer.
    */
@@ -161,7 +158,6 @@ export class WgpuExecutionContext {
 
   /**
    * Records a compute kernel dispatch into this context.
-   *
    * @param kernel The compute kernel to execute.
    * @param args Positional argument IDs referring to entries in this context.
    * @returns This context instance.

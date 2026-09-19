@@ -42,7 +42,6 @@ export class Model {
 
   /**
    * Loads an ExecuTorch `.pte` model from a binary buffer.
-   *
    * @param device The WebGPU GPUDevice instance.
    * @param pteData Binary buffer or Uint8Array of the `.pte` model file.
    * @returns A compiled, ready-to-run Model instance.
@@ -149,7 +148,6 @@ export class Model {
 
   /**
    * Executes an exported method by name.
-   *
    * @param methodName The method name to execute (e.g. 'forward').
    * @param inputs Ordered list of input arguments.
    * @returns Array of output values produced by the method.

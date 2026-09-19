@@ -13,7 +13,6 @@ import type { WgpuExecutionContext } from './context';
  *    tensors, allocates shape metadata uniform buffers, compiles or retrieves
  *    cached compute pipelines, and records the resulting compute dispatch into
  *    the given {@link WgpuExecutionContext}.
- *
  * @typeParam TArgs The tuple schema of value IDs accepted by this kernel's
  * {@link recordIn} method.
  */
@@ -36,7 +35,6 @@ export type Kernel<TArgs extends readonly PropertyKey[] = any> = {
    * Resolves tensor and scalar arguments from the execution context, validates
    * their dtypes, ranks, and broadcast shapes, constructs uniform metadata
    * buffers, and records the compute pass into the execution context.
-   *
    * @param ctx The {@link WgpuExecutionContext} where tensors are stored and
    * dispatches recorded.
    * @param args Arguments referring to entries in `ctx` (inputs, scalars,

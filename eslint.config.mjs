@@ -21,6 +21,7 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      ...jsdocPlugin.configs['recommended-typescript'].rules,
       'prettier/prettier': [
         'error',
         {
@@ -39,7 +40,10 @@ export default [
       'jsdoc/check-param-names': ['error', { checkDestructured: false }],
       'jsdoc/require-yields-type': 'off',
       'jsdoc/require-yields-description': 'warn',
-      'jsdoc/check-tag-names': ['error', { definedTags: ['category', 'property'] }],
+      'jsdoc/check-tag-names': ['error', { definedTags: ['category', 'property', 'internal'] }],
+      'jsdoc/tag-lines': ['error', 'any'],
+      'jsdoc/require-returns': 'off',
+      'jsdoc/require-returns-description': 'off',
     },
     settings: {
       jsdoc: {

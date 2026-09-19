@@ -116,7 +116,6 @@ export type WebGpuDelegateHeader = {
 
 /**
  * Reads a 64-bit unsigned integer as a JavaScript number.
- *
  * @param bb The flatbuffers ByteBuffer.
  * @param offset The byte offset into the buffer.
  * @returns The uint64 value as a number.
@@ -127,7 +126,6 @@ function readUint64Number(bb: ByteBuffer, offset: number): number {
 
 /**
  * Reads a 64-bit signed integer as a JavaScript number.
- *
  * @param bb The flatbuffers ByteBuffer.
  * @param offset The byte offset into the buffer.
  * @returns The int64 value as a number.
@@ -138,7 +136,6 @@ function readInt64Number(bb: ByteBuffer, offset: number): number {
 
 /**
  * Reads a UTF-8 string from a FlatBuffer table field.
- *
  * @param bb The flatbuffers ByteBuffer.
  * @param offset The byte offset of the string field.
  * @returns The decoded string.
@@ -150,7 +147,6 @@ function readString(bb: ByteBuffer, offset: number): string {
 
 /**
  * Parses the ExecuTorch ExtendedHeader from the raw binary file.
- *
  * @param bytes The raw file binary bytes.
  * @returns The parsed ExtendedHeader or null if not present.
  */
@@ -179,7 +175,6 @@ export function parseExtendedHeader(bytes: Uint8Array): ExtendedHeader | null {
 
 /**
  * Parses the WebGPUDelegateHeader ('VH00') from raw delegate binary data.
- *
  * @param bytes Raw binary slice containing the WebGPU delegate header.
  * @returns The parsed WebGpuDelegateHeader descriptor.
  */
@@ -209,7 +204,6 @@ export function parseWebGpuDelegateHeader(bytes: Uint8Array): WebGpuDelegateHead
 
 /**
  * Decodes a VkGraph ('VK00') FlatBuffer table and its contained execution chain.
- *
  * @param fbBytes FlatBuffer binary slice containing the VkGraph table.
  * @param constantData Contiguous raw weight constant bytes.
  * @param backendId The backend delegate identifier string.
@@ -429,7 +423,6 @@ export function parseVkGraph(
 
 /**
  * Parses an entire ExecuTorch `.pte` model binary into a structured Program.
- *
  * @param pteData Raw Uint8Array of the entire `.pte` file.
  * @returns The parsed Program with all execution plans and WebGPU delegate graphs.
  */
