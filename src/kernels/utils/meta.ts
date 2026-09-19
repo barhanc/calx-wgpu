@@ -45,7 +45,10 @@ const OFFSET_STRIDES = 12; // Byte offset 48 (48 / 4 = 12)
  * @param targetRank Optional target rank to right-align dimensions for broadcasting.
  * @returns ArrayBuffer containing the 80-byte std140 uniform data.
  */
-function encodeTensorMeta(tensor: Tensor, targetRank: number = tensor.shape.length): ArrayBuffer {
+export function encodeTensorMeta(
+  tensor: Tensor,
+  targetRank: number = tensor.shape.length
+): ArrayBuffer {
   const shape = tensor.shape;
 
   if (shape.length > MAX_NDIM || targetRank > MAX_NDIM) {
@@ -75,25 +78,5 @@ function encodeTensorMeta(tensor: Tensor, targetRank: number = tensor.shape.leng
     stride *= dim;
   }
 
-  return buffer;
-}
-
-/**
- * Allocates and populates an 80-byte WebGPU uniform buffer with TensorMeta data for a Tensor.
- *
- * @param tensor The Tensor instance to create a metadata uniform buffer for.
- * @param targetRank Optional target rank to right-align dimensions for broadcasting.
- * @returns An allocated GPUBuffer with uniform usage.
- */
-export function createTensorMetaBuffer(
-  tensor: Tensor,
-  targetRank: number = tensor.shape.length
-): GPUBuffer {
-  const metaBytes = encodeTensorMeta(tensor, targetRank);
-  const buffer = tensor.device.createBuffer({
-    size: TENSOR_META_BYTE_SIZE,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-  tensor.device.queue.writeBuffer(buffer, 0, metaBytes);
   return buffer;
 }

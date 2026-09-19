@@ -2,7 +2,7 @@ import type { Kernel } from '../kernel';
 import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
-const NAME = 'aten::mm.default';
+const NAME = 'aten.mm.default';
 
 /**
  * WGSL compute shader for matrix multiplication with shared-memory tiling
@@ -198,34 +198,14 @@ const TILE = 32;
  * Positional argument tuple for `aten::mm.default`:
  * `[in1, in2, out]`
  */
-export type MmArgs = readonly [in1: number, in2: number, out: number];
-
-/**
- * Creates a uniform buffer encoding 16-byte aligned `Params { M, N, K, pad_ }`.
- *
- * @param device WebGPU device instance.
- * @param m Number of rows of matrix A.
- * @param n Number of columns of matrix B.
- * @param k Shared inner dimension.
- * @returns Allocated and populated uniform GPUBuffer.
- */
-function createMmParamsBuffer(device: GPUDevice, m: number, n: number, k: number): GPUBuffer {
-  const buffer = device.createBuffer({
-    size: 16,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    mappedAtCreation: true,
-  });
-  new Uint32Array(buffer.getMappedRange()).set([m, n, k, 0]);
-  buffer.unmap();
-  return buffer;
-}
+export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: PropertyKey];
 
 /**
  * Internal dispatch builder for `aten::mm.default`.
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */
-function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
+function dispatchIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
   const a = ctx.getTensor(in1Id);
   const b = ctx.getTensor(in2Id);
   const out = ctx.getTensor(outId);
@@ -251,7 +231,7 @@ function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   }
 
   const device = ctx.device;
-  const paramsBuffer = createMmParamsBuffer(device, m, n, kA);
+  const paramsBuffer = ctx.uniformBuffer(new Uint32Array([m, n, kA, 0]));
 
   const workgroupCountX = Math.ceil(n / TILE);
   const workgroupCountY = Math.ceil(m / TILE);
@@ -266,8 +246,6 @@ function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
     { binding: 2, buffer: out.buffer },
     { binding: 3, buffer: paramsBuffer },
   ]);
-
-  ctx.ownBuffer(paramsBuffer);
 
   ctx.addDispatch({
     pipeline: bundle.pipeline,
@@ -287,6 +265,6 @@ function attachTo(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
  */
 export const mm: Kernel<MmArgs> = {
   name: NAME,
-  wgsl: SHADER_TILED,
-  attachTo,
+  wgsl: { tiled: SHADER_TILED, vec4: SHADER_VEC4 },
+  dispatchIn,
 };

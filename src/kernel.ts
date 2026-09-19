@@ -6,16 +6,19 @@ import type { WgpuExecutionContext } from './context';
  * Each kernel encapsulates:
  * 1. Its canonical PyTorch / ExecuTorch operator identifier (`name`, e.g.
  *    `'aten::add.Tensor'`).
- * 2. Its raw WebGPU Shading Language source code (`wgsl`).
- * 3. Its dispatch construction logic (`attachTo`), which validates input/output
+ * 2. Its raw WebGPU Shading Language source code (`wgsl`), which can be a single
+ *    shader string or a record of named shader variants
+ *    (e.g. `{ tiled: string, vec4: string }`).
+ * 3. Its dispatch construction logic (`dispatchIn`), which validates input/output
  *    tensors, allocates shape metadata uniform buffers, compiles or retrieves
  *    cached compute pipelines, and records the resulting compute dispatch into
  *    the given {@link WgpuExecutionContext}.
  *
  * @typeParam TArgs The tuple schema of value IDs accepted by this kernel's
- * {@link attachTo} method.
+ * {@link dispatchIn} method.
  */
-export type Kernel<TArgs extends readonly number[] = readonly number[]> = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Kernel<TArgs extends readonly PropertyKey[] = any> = {
   /**
    * The canonical ExecuTorch operator target name. Matches operator node
    * schemas in the `.pte` FlatBuffer (e.g. `'aten::add.Tensor'`).
@@ -23,11 +26,11 @@ export type Kernel<TArgs extends readonly number[] = readonly number[]> = {
   readonly name: string;
 
   /**
-   * The complete WGSL compute shader source code template for this kernel.
+   * The complete WGSL compute shader source code or variant record for this kernel.
    * Exposes compile-time pipeline override constants (e.g. workgroup sizes,
    * scalars).
    */
-  readonly wgsl: string;
+  readonly wgsl: string | Record<string, string>;
 
   /**
    * Resolves tensor and scalar arguments from the execution context, validates
@@ -41,5 +44,5 @@ export type Kernel<TArgs extends readonly number[] = readonly number[]> = {
    * @throws {Error} If arguments are invalid, dtypes mismatch, or shapes are
    * not broadcastable.
    */
-  readonly attachTo: (ctx: WgpuExecutionContext, args: TArgs) => void;
+  readonly dispatchIn: (ctx: WgpuExecutionContext, args: TArgs) => void;
 };

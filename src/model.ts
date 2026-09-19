@@ -2,7 +2,7 @@ import { WgpuExecutionContext } from './context';
 import type { Kernel } from './kernel';
 import { kernels } from './kernels';
 import { parsePte, type ParsedProgram, type ParsedVkValue } from './parser';
-import { Tensor, type DType } from './tensor';
+import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
 
 /**
  * Any value that can be passed as an input argument or returned from a model method.
@@ -13,35 +13,6 @@ export type ModelInput = ModelValue;
 export type ModelOutput = ModelValue;
 
 /**
- * Type guard to check if a value is a Phlox Tensor.
- *
- * @param val Candidate value.
- * @returns True if value is an instance of Tensor.
- */
-function isTensor(val: unknown): val is Tensor {
-  return val instanceof Tensor;
-}
-
-/**
- * Normalizes ExecuTorch operator target names to our internal registry keys.
- * Handles variations such as 'aten.add.Tensor', 'aten::add.Tensor',
- * 'aten.mm.default', and 'aten::mm.default'.
- *
- * @param opName Operator target name from the delegate graph.
- * @returns The matching Kernel if registered.
- */
-function resolveKernel(opName: string): Kernel | undefined {
-  const normalized = opName.replace('.', '::');
-  if (normalized === 'aten::add.Tensor' || opName === 'aten.add.Tensor') {
-    return kernels.add as Kernel;
-  }
-  if (normalized === 'aten::mm.default' || opName === 'aten.mm.default') {
-    return kernels.mm as Kernel;
-  }
-  return undefined;
-}
-
-/**
  * Internal method execution plan state.
  */
 type MethodPlan = {
@@ -50,7 +21,6 @@ type MethodPlan = {
   readonly outputIds: readonly number[];
   readonly values: readonly ParsedVkValue[];
   readonly context: WgpuExecutionContext;
-  readonly sharedBuffers: Map<number, GPUBuffer>;
   readonly outputTensors: Map<number, Tensor>;
 };
 
@@ -103,7 +73,7 @@ export class Model {
       for (const val of delegate.values) {
         if (val.kind === 'tensor' && val.memObjId >= 0) {
           const numel = val.dims.reduce((acc, d) => acc * d, 1);
-          const elemSize = val.dtype === 'float32' ? 4 : 1;
+          const elemSize = DTYPE_BYTESIZE[val.dtype as DType] ?? 1;
           const byteSize = Math.max(numel * elemSize, 4);
           const currentMax = sharedSizes.get(val.memObjId) ?? 0;
           if (byteSize > currentMax) {
@@ -115,13 +85,7 @@ export class Model {
       // Pass 2: Allocate shared GPU storage buffers
       const sharedBuffers = new Map<number, GPUBuffer>();
       for (const [memId, size] of sharedSizes) {
-        const alignedSize = (size + 3) & ~3;
-        const buf = this.#device.createBuffer({
-          size: alignedSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-        });
-        ctx.ownBuffer(buf);
-        sharedBuffers.set(memId, buf);
+        sharedBuffers.set(memId, ctx.storageBuffer(size));
       }
 
       // Pass 3: Create tensors and populate context values
@@ -134,13 +98,8 @@ export class Model {
             buffer = sharedBuffers.get(val.memObjId)!;
           } else {
             const numel = val.dims.reduce((acc, d) => acc * d, 1);
-            const elemSize = val.dtype === 'float32' ? 4 : 1;
-            const alignedSize = Math.max((numel * elemSize + 3) & ~3, 4);
-            buffer = this.#device.createBuffer({
-              size: alignedSize,
-              usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-            });
-            ctx.ownBuffer(buffer);
+            const elemSize = DTYPE_BYTESIZE[val.dtype as DType] ?? 1;
+            buffer = ctx.storageBuffer(numel * elemSize);
           }
 
           const t = new Tensor(val.dtype as DType, val.dims, this.#device, buffer);
@@ -149,17 +108,11 @@ export class Model {
           // Upload constant weight data if present
           if (val.constantId >= 0 && val.constantId < delegate.constants.length) {
             const constMeta = delegate.constants[val.constantId];
-            const rawConst = delegate.constantData.slice(
+            const rawConst = delegate.constantData.subarray(
               constMeta.offset,
               constMeta.offset + constMeta.length
             );
-            this.#device.queue.writeBuffer(
-              buffer,
-              0,
-              rawConst.buffer,
-              rawConst.byteOffset,
-              rawConst.byteLength
-            );
+            t.setData(rawConst);
           }
 
           if (delegate.outputIds.includes(i)) {
@@ -174,11 +127,13 @@ export class Model {
 
       // Pass 4: Build operator dispatch chain
       for (const op of delegate.chain) {
-        const kernel = resolveKernel(op.name);
+        const kernel = (Object.values(kernels) as readonly Kernel[]).find(
+          (k) => k.name === op.name
+        );
         if (!kernel) {
-          throw new Error(`Unsupported ExecuTorch WebGPU operator: '${op.name}'`);
+          throw new Error(`Unsupported ExecuTorch operator: '${op.name}'`);
         }
-        kernel.attachTo(ctx, op.args);
+        kernel.dispatchIn(ctx, op.args);
       }
 
       this.#plans.set(methodName, {
@@ -187,7 +142,6 @@ export class Model {
         outputIds: delegate.outputIds,
         values: delegate.values,
         context: ctx,
-        sharedBuffers,
         outputTensors,
       });
     }
@@ -200,9 +154,9 @@ export class Model {
    * @param inputs Ordered list of input arguments.
    * @returns Array of output values produced by the method.
    */
-  async execute(methodName: string, inputs: readonly ModelInput[]): Promise<ModelOutput[]> {
+  async execute(methodName: string, inputs: readonly ModelInput[] = []): Promise<ModelOutput[]> {
     if (this.#disposed) {
-      throw new Error('Model has been disposed and cannot be executed');
+      throw new Error('Model is disposed');
     }
 
     const plan = this.#plans.get(methodName);
@@ -211,9 +165,7 @@ export class Model {
     }
 
     if (inputs.length !== plan.inputIds.length) {
-      throw new Error(
-        `Method '${methodName}' expects ${plan.inputIds.length} inputs, got ${inputs.length}`
-      );
+      throw new Error(`Method '${methodName}' expects ${plan.inputIds.length} inputs`);
     }
 
     // Bind inputs to context slots
@@ -222,31 +174,26 @@ export class Model {
       const targetId = plan.inputIds[idx];
       const expectedVal = plan.values[targetId];
 
-      if (isTensor(input)) {
+      if (input instanceof Tensor) {
         if (expectedVal.kind !== 'tensor') {
           throw new Error(`Input ${idx} expected scalar but received Tensor`);
         }
         const targetTensor = plan.context.getTensor(targetId);
-
-        // Copy host input data to GPU buffer
-        const encoder = this.#device.createCommandEncoder();
-        encoder.copyBufferToBuffer(input.buffer, 0, targetTensor.buffer, 0, input.buffer.size);
-        this.#device.queue.submit([encoder.finish()]);
+        targetTensor.setData(input.buffer);
       } else if (typeof input === 'number') {
         plan.context.setScalar(targetId, input);
       }
     }
 
-    // Submit WebGPU compute pass
-    plan.context.execute();
+    // 3. Submit dispatches to GPU
+    plan.context.submit();
 
     // Readback outputs
     const outputs: ModelOutput[] = [];
     for (const outId of plan.outputIds) {
       const outVal = plan.values[outId];
       if (outVal.kind === 'tensor') {
-        const outTensor = plan.outputTensors.get(outId)!;
-        outputs.push(outTensor);
+        outputs.push(plan.outputTensors.get(outId)!);
       } else if (outVal.kind === 'scalar') {
         outputs.push(plan.context.getScalar(outId));
       } else {
@@ -258,25 +205,12 @@ export class Model {
   }
 
   /**
-   * Convenience shorthand for executing the default 'forward' method.
-   *
-   * @param inputs Input arguments passed to the forward method.
-   * @returns Output values produced by the forward method.
-   */
-  async forward(...inputs: readonly ModelInput[]): Promise<ModelOutput[]> {
-    return this.execute('forward', inputs);
-  }
-
-  /**
    * Releases all GPU buffers, bind groups, and execution resources owned by this model.
    */
   dispose(): void {
     if (this.#disposed) return;
     for (const plan of this.#plans.values()) {
       plan.context.destroy();
-      for (const buf of plan.sharedBuffers.values()) {
-        buf.destroy();
-      }
     }
     this.#plans.clear();
     this.#disposed = true;

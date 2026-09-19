@@ -14,13 +14,14 @@ export type TypedArray = Float32Array | Int32Array | Int8Array | Uint8Array | Ui
 export const MAX_NDIM = 8;
 
 // prettier-ignore
-const DTYPE_BYTESIZE: Record<DType, number> = {
+export const DTYPE_BYTESIZE: Record<DType, number> = {
   float32: 4, float16: 2,
   int32:   4, int8:    1,
   uint8:   1, bool:    1,
 } as const;
 
-const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
+const STAGING_BUFFER_USAGE = // prettier-ignore
+  GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
 const STORAGE_BUFFER_USAGE =
   GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
@@ -29,7 +30,8 @@ const STORAGE_BUFFER_USAGE =
  *
  * Encapsulates an allocated `GPUBuffer` in device VRAM along with its metadata
  * (`dtype`, `shape`, `numel`). Use {@link Tensor.getData} to read raw bytes
- * back into host memory, or {@link Tensor.destroy} to release GPU memory.
+ * back into host memory, {@link Tensor.setData} to copy data into it,
+ * or {@link Tensor.destroy} to release GPU memory.
  */
 export class Tensor {
   readonly #dtype: DType;
@@ -42,7 +44,7 @@ export class Tensor {
     dtype: DType,
     shape: readonly number[],
     device: GPUDevice,
-    source?: GPUBuffer | TypedArray
+    src?: GPUBuffer | TypedArray
   ) {
     if (shape.length > MAX_NDIM) {
       throw new Error(`Tensor rank ${shape.length} exceeds maximum rank of ${MAX_NDIM}`);
@@ -59,30 +61,30 @@ export class Tensor {
     const byteLength = this.#numel * DTYPE_BYTESIZE[dtype];
     const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
 
-    if (source === undefined) {
+    if (src === undefined) {
       this.#buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
       return;
     }
 
-    if (source instanceof GPUBuffer) {
-      if (source.size < byteLength) {
-        throw new Error(`GPUBuffer size (${source.size}B) < required tensor size (${byteLength}B)`);
+    if (src instanceof GPUBuffer) {
+      if (src.size < byteLength) {
+        throw new Error(`GPUBuffer size (${src.size}B) < required tensor size (${byteLength}B)`);
       }
 
-      if ((source.usage & GPUBufferUsage.STORAGE) === 0) {
+      if ((src.usage & GPUBufferUsage.STORAGE) === 0) {
         throw new Error('GPUBuffer must have GPUBufferUsage.STORAGE flag');
       }
 
-      this.#buffer = source;
+      this.#buffer = src;
       return;
     }
 
-    if (source.byteLength !== byteLength) {
-      throw new Error(`Source bytes (${source.byteLength}B) !== tensor size (${byteLength}B)`);
+    if (src.byteLength !== byteLength) {
+      throw new Error(`Source bytes (${src.byteLength}B) !== tensor size (${byteLength}B)`);
     }
 
     this.#buffer = device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
-    device.queue.writeBuffer(this.#buffer, 0, source.buffer, source.byteOffset, byteLength);
+    device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
   }
 
   /** The element data type of the tensor. */
@@ -118,20 +120,51 @@ export class Tensor {
   }
 
   /**
+   * Copies data from a host TypedArray or existing GPUBuffer into this tensor's
+   * storage buffer.
+   *
+   * @param src Source TypedArray or GPUBuffer to copy from.
+   * @throws {Error} If source byte size does not match this tensor's byte
+   * length.
+   */
+  setData(src: GPUBuffer | TypedArray): void {
+    const byteLength = this.byteLength;
+    if (src instanceof GPUBuffer) {
+      if (src.size < byteLength) {
+        throw new Error(`GPUBuffer size (${src.size}B) < tensor size (${byteLength}B)`);
+      }
+
+      if ((src.usage & GPUBufferUsage.COPY_SRC) === 0) {
+        throw new Error('GPUBuffer must have GPUBufferUsage.COPY_SRC flag');
+      }
+
+      const encoder = this.#device.createCommandEncoder();
+      encoder.copyBufferToBuffer(src, 0, this.#buffer, 0, byteLength);
+      this.#device.queue.submit([encoder.finish()]);
+      return;
+    }
+
+    if (src.byteLength !== byteLength) {
+      throw new Error(`Source bytes (${src.byteLength}B) !== tensor byteLength (${byteLength}B)`);
+    }
+    this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
+  }
+
+  /**
    * Reads raw bytes back from the GPU storage buffer into host memory.
    *
    * @returns Raw byte buffer containing the tensor data.
    */
   async getData(): Promise<ArrayBuffer> {
-    const alignedSize = Math.max(16, Math.ceil(this.byteLength / 4) * 4);
+    const byteLength = this.byteLength;
+    const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
     const encoder = this.#device.createCommandEncoder();
     const staging = this.#device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
-
     try {
       encoder.copyBufferToBuffer(this.#buffer, 0, staging, 0, alignedSize);
       this.#device.queue.submit([encoder.finish()]);
       await staging.mapAsync(GPUMapMode.READ);
-      return staging.getMappedRange(0, this.byteLength).slice(0);
+      return staging.getMappedRange(0, byteLength).slice(0);
     } finally {
       staging.destroy();
     }

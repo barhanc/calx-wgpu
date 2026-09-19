@@ -1,5 +1,6 @@
-import type { Tensor } from './tensor';
+import type { Kernel } from './kernel';
 import type { WgpuDispatch } from './dispatch';
+import { Tensor, type DType, type TypedArray } from './tensor';
 
 /**
  * Execution context that manages GPU tensors, uniform buffers,
@@ -7,10 +8,10 @@ import type { WgpuDispatch } from './dispatch';
  */
 export class WgpuExecutionContext {
   readonly #device: GPUDevice;
-  readonly #tensors = new Map<number, Tensor>();
-  readonly #scalars = new Map<number, number>();
+  readonly #tensors = new Map<PropertyKey, Tensor>();
+  readonly #scalars = new Map<PropertyKey, number>();
   readonly #dispatches: WgpuDispatch[] = [];
-  readonly #ownedBuffers: GPUBuffer[] = [];
+  readonly #ownedBuffers = new Set<GPUBuffer>();
 
   /**
    * Constructs a new WgpuExecutionContext.
@@ -27,49 +28,111 @@ export class WgpuExecutionContext {
 
   /**
    * Retrieves a tensor value by its context value ID.
-   * @param id Integer ID of the value in the context.
+   * @param id Identifier of the value in the context.
    * @returns The Tensor instance.
    */
-  getTensor(id: number): Tensor {
+  getTensor(id: PropertyKey): Tensor {
     const t = this.#tensors.get(id);
     if (!t) {
-      throw new Error(`WgpuExecutionContext: Tensor with ID ${id} not found in context`);
+      throw new Error(`WgpuExecutionContext: Tensor with ID ${String(id)} not found in context`);
     }
     return t;
   }
 
   /**
    * Sets or replaces a tensor value in the context.
-   * @param id Integer ID of the value.
+   * @param id Identifier of the value.
    * @param t The Tensor instance.
+   * @returns This context for chaining.
    */
-  setTensor(id: number, t: Tensor): void {
+  setTensor(id: PropertyKey, t: Tensor): this {
     if (t.device !== this.#device) {
       throw new Error('WgpuExecutionContext: Tensor device mismatch');
     }
     this.#tensors.set(id, t);
+    return this;
   }
 
   /**
    * Retrieves a scalar constant by its context value ID.
-   * @param id Integer ID of the scalar in the context.
+   * @param id Identifier of the scalar in the context.
    * @returns The numeric value.
    */
-  getScalar(id: number): number {
+  getScalar(id: PropertyKey): number {
     const s = this.#scalars.get(id);
     if (s === undefined) {
-      throw new Error(`WgpuExecutionContext: Scalar with ID ${id} not found in context`);
+      throw new Error(`WgpuExecutionContext: Scalar with ID ${String(id)} not found in context`);
     }
     return s;
   }
 
   /**
    * Sets a scalar constant in the context.
-   * @param id Integer ID of the scalar.
+   * @param id Identifier of the scalar.
    * @param val The numeric value.
+   * @returns This context for chaining.
    */
-  setScalar(id: number, val: number): void {
+  setScalar(id: PropertyKey, val: number): this {
     this.#scalars.set(id, val);
+    return this;
+  }
+
+  /**
+   * Creates a new Tensor whose underlying GPUBuffer is automatically tracked
+   * and released when this execution context is destroyed.
+   *
+   * @param dtype Data type of elements.
+   * @param shape Dimensions of the tensor (rank <= 8).
+   * @param src Optional initial host data or existing GPUBuffer to wrap.
+   * @returns A newly created context-owned Tensor instance.
+   */
+  tensor(dtype: DType, shape: readonly number[], src?: GPUBuffer | TypedArray): Tensor {
+    const t = new Tensor(dtype, shape, this.#device, src);
+    this.ownBuffer(t.buffer);
+    return t;
+  }
+
+  /**
+   * Creates an empty WebGPU storage buffer whose lifetime is managed by this context.
+   *
+   * @param size Size in bytes to allocate.
+   * @returns The newly allocated and owned GPUBuffer with STORAGE | COPY_SRC | COPY_DST usage.
+   */
+  storageBuffer(size: number): GPUBuffer {
+    const alignedSize = Math.max(4, Math.ceil(size / 4) * 4);
+    const buffer = this.#device.createBuffer({
+      size: alignedSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+
+    this.ownBuffer(buffer);
+    return buffer;
+  }
+
+  /**
+   * Creates and populates a WebGPU uniform buffer whose lifetime is managed
+   * by this context.
+   *
+   * @param data Binary data to copy into the uniform buffer.
+   * @returns The newly allocated and owned GPUBuffer.
+   */
+  uniformBuffer(data: ArrayBufferView | ArrayBuffer): GPUBuffer {
+    const byteLength = data.byteLength;
+    const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
+
+    const buffer = this.#device.createBuffer({
+      size: alignedSize,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    if (data instanceof ArrayBuffer) {
+      this.#device.queue.writeBuffer(buffer, 0, data, 0, byteLength);
+    } else {
+      this.#device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, byteLength);
+    }
+
+    this.ownBuffer(buffer);
+    return buffer;
   }
 
   /**
@@ -86,13 +149,25 @@ export class WgpuExecutionContext {
    * @param buffer The GPUBuffer to take ownership of.
    */
   ownBuffer(buffer: GPUBuffer): void {
-    this.#ownedBuffers.push(buffer);
+    this.#ownedBuffers.add(buffer);
   }
 
   /**
-   * Encodes all recorded dispatches into a single command buffer and submits to the GPU.
+   * Dispatches a compute kernel into this context.
+   *
+   * @param kernel The compute kernel to execute.
+   * @param args Positional argument IDs referring to entries in this context.
+   * @returns This context for chaining.
    */
-  execute(): void {
+  dispatch<TArgs extends readonly PropertyKey[]>(kernel: Kernel<TArgs>, args: TArgs): this {
+    kernel.dispatchIn(this, args);
+    return this;
+  }
+
+  /**
+   * Encodes all recorded dispatches into a single command buffer and submits to the GPU queue.
+   */
+  submit(): void {
     if (this.#dispatches.length === 0) return;
 
     const encoder = this.#device.createCommandEncoder();
@@ -113,13 +188,21 @@ export class WgpuExecutionContext {
   }
 
   /**
+   * Clears all recorded dispatches to prepare for a fresh recording pass
+   * while keeping registered tensors, scalars, and owned buffers intact.
+   */
+  reset(): void {
+    this.#dispatches.length = 0;
+  }
+
+  /**
    * Destroys all owned buffers and releases resources.
    */
   destroy(): void {
     for (const buffer of this.#ownedBuffers) {
       buffer.destroy();
     }
-    this.#ownedBuffers.length = 0;
+    this.#ownedBuffers.clear();
     this.#dispatches.length = 0;
     this.#tensors.clear();
     this.#scalars.clear();

@@ -3,9 +3,9 @@ import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
 import { isBroadcastable } from './utils/broadcast';
-import { createTensorMetaBuffer, TENSOR_META_WGSL } from './utils/meta';
+import { encodeTensorMeta, TENSOR_META_WGSL } from './utils/meta';
 
-const NAME = 'aten::add.Tensor';
+const NAME = 'aten.add.Tensor';
 
 /**
  * WGSL compute shader for binary addition with broadcast support.
@@ -66,18 +66,19 @@ fn main(
 
 /**
  * Positional argument tuple for `aten::add.Tensor`:
- * `[in1, in2, alpha, out]` or `[in1, in2, out]`
+ * Standard ExecuTorch schema: `[in1, in2, alpha, out]`
+ * Or 3-arg variant: `[in1, in2, out]`
  */
 export type AddArgs =
-  | readonly [in1: number, in2: number, out: number]
-  | readonly [in1: number, in2: number, alpha: number, out: number];
+  | readonly [in1: PropertyKey, in2: PropertyKey, out: PropertyKey]
+  | readonly [in1: PropertyKey, in2: PropertyKey, alpha: PropertyKey, out: PropertyKey];
 
 /**
  * Internal dispatch builder for `aten::add.Tensor`.
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */
-function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
+function dispatchIn(ctx: WgpuExecutionContext, args: AddArgs): void {
   const in1 = ctx.getTensor(args[0]);
   const in2 = ctx.getTensor(args[1]);
   const out = ctx.getTensor(args[args.length - 1]);
@@ -91,9 +92,9 @@ function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
   }
 
   const outRank = out.shape.length;
-  const outMetaBuffer = createTensorMetaBuffer(out);
-  const in1MetaBuffer = createTensorMetaBuffer(in1, outRank);
-  const in2MetaBuffer = createTensorMetaBuffer(in2, outRank);
+  const outMetaBuffer = ctx.uniformBuffer(encodeTensorMeta(out));
+  const in1MetaBuffer = ctx.uniformBuffer(encodeTensorMeta(in1, outRank));
+  const in2MetaBuffer = ctx.uniformBuffer(encodeTensorMeta(in2, outRank));
 
   const device = ctx.device;
   const wgSize = 256;
@@ -116,10 +117,6 @@ function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
     { wg_size: wgSize, alpha }
   );
 
-  ctx.ownBuffer(outMetaBuffer);
-  ctx.ownBuffer(in1MetaBuffer);
-  ctx.ownBuffer(in2MetaBuffer);
-
   ctx.addDispatch({
     pipeline: bundle.pipeline,
     bindGroup: bundle.bindGroup,
@@ -138,5 +135,5 @@ function attachTo(ctx: WgpuExecutionContext, args: AddArgs): void {
 export const add: Kernel<AddArgs> = {
   name: NAME,
   wgsl: SHADER,
-  attachTo,
+  dispatchIn,
 };

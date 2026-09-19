@@ -99,30 +99,26 @@ runBtn.addEventListener('click', async () => {
     // x shape: [2, 3], y shape: [1, 3] -> broadcast output: [2, 3]
     const xData = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     const yData = new Float32Array([10.0, 20.0, 30.0]);
-    const tensorX = new Tensor('float32', [2, 3], device, xData);
-    const tensorY = new Tensor('float32', [1, 3], device, yData);
-    const tensorOut = new Tensor('float32', [2, 3], device);
 
     const ctx = new WgpuExecutionContext(device);
-    ctx.setTensor(0, tensorX);
-    ctx.setTensor(1, tensorY);
-    ctx.setScalar(2, 2.0); // alpha = 2.0
-    ctx.setTensor(3, tensorOut);
-
-    // Build and record dispatch into context [in1, in2, alpha, out]
-    kernels.add.attachTo(ctx, [0, 1, 2, 3]);
+    ctx
+      .setTensor('in1', ctx.tensor('float32', [2, 3], xData))
+      .setTensor('in2', ctx.tensor('float32', [1, 3], yData))
+      .setScalar('alpha', 2.0)
+      .setTensor('out', ctx.tensor('float32', [2, 3]))
+      .dispatch(kernels.add, ['in1', 'in2', 'alpha', 'out']);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
     const t0 = performance.now();
-    ctx.execute();
+    ctx.submit();
     await device.queue.onSubmittedWorkDone();
     const durationMs = performance.now() - t0;
     log(`   Execution completed in ${durationMs.toFixed(3)}ms (GPU queue wall-time)`);
-    log(`   Out shape: [${tensorOut.shape.join(', ')}]`);
+    log(`   Out shape: [${ctx.getTensor('out').shape.join(', ')}]`);
 
     log('10. Reading back compute shader output...');
-    const outBytes = await tensorOut.getData();
+    const outBytes = await ctx.getTensor('out').getData();
     const outFloats = new Float32Array(outBytes);
     log(`   Result: [${Array.from(outFloats).join(', ')}]`);
 
@@ -139,9 +135,6 @@ runBtn.addEventListener('click', async () => {
     }
 
     ctx.destroy();
-    tensorX.destroy();
-    tensorY.destroy();
-    tensorOut.destroy();
 
     log('\n--- Test D: Context Execution of aten.mm.default (Tiled GEMM) ---');
     log('11. Testing matrix multiplication: A (2x3) @ B (3x2) -> Out (2x2)...');
@@ -152,27 +145,24 @@ runBtn.addEventListener('click', async () => {
     //      [9,  1],
     //      [2,  3]]
     const bData = new Float32Array([7.0, 8.0, 9.0, 1.0, 2.0, 3.0]);
-    const tensorMatA = new Tensor('float32', [2, 3], device, aData);
-    const tensorMatB = new Tensor('float32', [3, 2], device, bData);
-    const tensorMatOut = new Tensor('float32', [2, 2], device);
 
     const mmCtx = new WgpuExecutionContext(device);
-    mmCtx.setTensor(0, tensorMatA);
-    mmCtx.setTensor(1, tensorMatB);
-    mmCtx.setTensor(2, tensorMatOut);
-
-    kernels.mm.attachTo(mmCtx, [0, 1, 2]);
+    mmCtx
+      .setTensor('a', mmCtx.tensor('float32', [2, 3], aData))
+      .setTensor('b', mmCtx.tensor('float32', [3, 2], bData))
+      .setTensor('out', mmCtx.tensor('float32', [2, 2]))
+      .dispatch(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
     const tMm = performance.now();
-    mmCtx.execute();
+    mmCtx.submit();
     await device.queue.onSubmittedWorkDone();
     const mmDurationMs = performance.now() - tMm;
     log(`   Execution completed in ${mmDurationMs.toFixed(3)}ms (GPU queue wall-time)`);
 
     log('13. Reading back matmul output...');
-    const mmBytes = await tensorMatOut.getData();
+    const mmBytes = await mmCtx.getTensor('out').getData();
     const mmFloats = new Float32Array(mmBytes);
     log(`   Result: [${Array.from(mmFloats).join(', ')}]`);
 
@@ -190,9 +180,6 @@ runBtn.addEventListener('click', async () => {
     }
 
     mmCtx.destroy();
-    tensorMatA.destroy();
-    tensorMatB.destroy();
-    tensorMatOut.destroy();
 
     log('\n--- Test E: Context Execution of aten.mm.default (128-bit Vectorized vec4 GEMM) ---');
     log('14. Testing vectorized matrix multiplication: A (4x4) @ B (4x4) -> Out (4x4)...');
@@ -201,27 +188,24 @@ runBtn.addEventListener('click', async () => {
     const aData4x4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     // B = 4x4 matrix [1..16]
     const bData4x4 = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
-    const tensorVecA = new Tensor('float32', [4, 4], device, aData4x4);
-    const tensorVecB = new Tensor('float32', [4, 4], device, bData4x4);
-    const tensorVecOut = new Tensor('float32', [4, 4], device);
 
     const vecCtx = new WgpuExecutionContext(device);
-    vecCtx.setTensor(0, tensorVecA);
-    vecCtx.setTensor(1, tensorVecB);
-    vecCtx.setTensor(2, tensorVecOut);
-
-    kernels.mm.attachTo(vecCtx, [0, 1, 2]);
+    vecCtx
+      .setTensor('a', vecCtx.tensor('float32', [4, 4], aData4x4))
+      .setTensor('b', vecCtx.tensor('float32', [4, 4], bData4x4))
+      .setTensor('out', vecCtx.tensor('float32', [4, 4]))
+      .dispatch(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
     const tVec = performance.now();
-    vecCtx.execute();
+    vecCtx.submit();
     await device.queue.onSubmittedWorkDone();
     const vecDurationMs = performance.now() - tVec;
     log(`   Execution completed in ${vecDurationMs.toFixed(3)}ms (GPU queue wall-time)`);
 
     log('16. Reading back vectorized output...');
-    const vecBytes = await tensorVecOut.getData();
+    const vecBytes = await vecCtx.getTensor('out').getData();
     const vecFloats = new Float32Array(vecBytes);
     log(`   Result: [${Array.from(vecFloats).join(', ')}]`);
 
@@ -237,9 +221,6 @@ runBtn.addEventListener('click', async () => {
     }
 
     vecCtx.destroy();
-    tensorVecA.destroy();
-    tensorVecB.destroy();
-    tensorVecOut.destroy();
 
     log('\n--- Test F: High-Performance GEMM Benchmark (2048x2048) vs NumPy ---');
     const benchDim = 2048;
@@ -279,24 +260,20 @@ runBtn.addEventListener('click', async () => {
     }
 
     log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
-    const benchTensorA = new Tensor('float32', [benchDim, benchDim], device, aFloats);
-    const benchTensorB = new Tensor('float32', [benchDim, benchDim], device, bFloats);
-    const benchTensorOut = new Tensor('float32', [benchDim, benchDim], device);
-
     const benchCtx = new WgpuExecutionContext(device);
-    benchCtx.setTensor(0, benchTensorA);
-    benchCtx.setTensor(1, benchTensorB);
-    benchCtx.setTensor(2, benchTensorOut);
-
-    kernels.mm.attachTo(benchCtx, [0, 1, 2]);
+    benchCtx
+      .setTensor('a', benchCtx.tensor('float32', [benchDim, benchDim], aFloats))
+      .setTensor('b', benchCtx.tensor('float32', [benchDim, benchDim], bFloats))
+      .setTensor('out', benchCtx.tensor('float32', [benchDim, benchDim]))
+      .dispatch(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
     log('19. Executing on WebGPU and verifying accuracy against NumPy...');
-    benchCtx.execute();
+    benchCtx.submit();
     await device.queue.onSubmittedWorkDone();
 
-    const actualOutBytes = await benchTensorOut.getData();
+    const actualOutBytes = await benchCtx.getTensor('out').getData();
     const actualFloats = new Float32Array(actualOutBytes);
 
     // Verify sample coordinates against NumPy reference
@@ -319,7 +296,7 @@ runBtn.addEventListener('click', async () => {
     log(`20. Running ${iterations} benchmark iterations on WebGPU...`);
     const tBenchStart = performance.now();
     for (let it = 0; it < iterations; it++) {
-      benchCtx.execute();
+      benchCtx.submit();
     }
     await device.queue.onSubmittedWorkDone();
     const totalBenchTimeMs = performance.now() - tBenchStart;
@@ -342,9 +319,6 @@ runBtn.addEventListener('click', async () => {
     log('   ✅ Test F PASSED: 2048x2048 GEMM benchmark completed!');
 
     benchCtx.destroy();
-    benchTensorA.destroy();
-    benchTensorB.destroy();
-    benchTensorOut.destroy();
 
     log('\n--- Test G: Scalar Tiled GEMM Benchmark (2047x2047, non-divisible by 4) ---');
     const oddM = 2047;
@@ -390,24 +364,20 @@ runBtn.addEventListener('click', async () => {
     }
 
     log(`22. Uploading 2047x2047 test matrices to WebGPU VRAM...`);
-    const oddTensorA = new Tensor('float32', [oddM, oddK], device, aOddFloats);
-    const oddTensorB = new Tensor('float32', [oddK, oddN], device, bOddFloats);
-    const oddTensorOut = new Tensor('float32', [oddM, oddN], device);
-
     const oddCtx = new WgpuExecutionContext(device);
-    oddCtx.setTensor(0, oddTensorA);
-    oddCtx.setTensor(1, oddTensorB);
-    oddCtx.setTensor(2, oddTensorOut);
-
-    kernels.mm.attachTo(oddCtx, [0, 1, 2]);
+    oddCtx
+      .setTensor('a', oddCtx.tensor('float32', [oddM, oddK], aOddFloats))
+      .setTensor('b', oddCtx.tensor('float32', [oddK, oddN], bOddFloats))
+      .setTensor('out', oddCtx.tensor('float32', [oddM, oddN]))
+      .dispatch(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check
     log('23. Executing on WebGPU and verifying accuracy against NumPy...');
-    oddCtx.execute();
+    oddCtx.submit();
     await device.queue.onSubmittedWorkDone();
 
-    const actualOddBytes = await oddTensorOut.getData();
+    const actualOddBytes = await oddCtx.getTensor('out').getData();
     const actualOddFloats = new Float32Array(actualOddBytes);
 
     const checkOdd00 = Math.abs(actualOddFloats[0] - metaOdd.sample_0_0);
@@ -429,7 +399,7 @@ runBtn.addEventListener('click', async () => {
     log(`24. Running ${oddIterations} benchmark iterations on WebGPU...`);
     const tOddStart = performance.now();
     for (let it = 0; it < oddIterations; it++) {
-      oddCtx.execute();
+      oddCtx.submit();
     }
     await device.queue.onSubmittedWorkDone();
     const totalOddTimeMs = performance.now() - tOddStart;
@@ -451,9 +421,6 @@ runBtn.addEventListener('click', async () => {
     log('   ✅ Test G PASSED: 2047x2047 scalar tiled GEMM benchmark completed!');
 
     oddCtx.destroy();
-    oddTensorA.destroy();
-    oddTensorB.destroy();
-    oddTensorOut.destroy();
 
     log('\n--- Test H: End-to-End ExecuTorch .pte Model Execution ---');
     log('14. Fetching and loading simple_add.pte model...');
@@ -470,8 +437,8 @@ runBtn.addEventListener('click', async () => {
     const modelIn1 = new Tensor('float32', [2, 4], device, modelIn1Data);
     const modelIn2 = new Tensor('float32', [2, 4], device, modelIn2Data);
 
-    log('15. Executing model.forward(in1, in2)...');
-    const outputs = await model.forward(modelIn1, modelIn2);
+    log("15. Executing model.execute('forward', [in1, in2])...");
+    const outputs = await model.execute('forward', [modelIn1, modelIn2]);
     const outTensor = outputs[0] as Tensor;
     const modelOutBytes = await outTensor.getData();
     const modelOutFloats = new Float32Array(modelOutBytes);
