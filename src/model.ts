@@ -2,7 +2,7 @@ import { WgpuExecutionContext } from './context';
 import type { Kernel } from './kernel';
 import { kernels } from './kernels';
 import { parsePte, type ParsedProgram, type ParsedVkValue } from './parser';
-import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
+import { Tensor, DTYPE_BYTESIZE } from './tensor';
 
 /**
  * Any value that can be passed as an input argument or returned from a model method.
@@ -73,7 +73,7 @@ export class Model {
       for (const val of delegate.values) {
         if (val.kind === 'tensor' && val.memObjId >= 0) {
           const numel = val.dims.reduce((acc, d) => acc * d, 1);
-          const elemSize = DTYPE_BYTESIZE[val.dtype as DType] ?? 1;
+          const elemSize = DTYPE_BYTESIZE[val.dtype];
           const byteSize = Math.max(numel * elemSize, 4);
           const currentMax = sharedSizes.get(val.memObjId) ?? 0;
           if (byteSize > currentMax) {
@@ -98,12 +98,12 @@ export class Model {
             buffer = sharedBuffers.get(val.memObjId)!;
           } else {
             const numel = val.dims.reduce((acc, d) => acc * d, 1);
-            const elemSize = DTYPE_BYTESIZE[val.dtype as DType] ?? 1;
+            const elemSize = DTYPE_BYTESIZE[val.dtype];
             buffer = ctx.storageBuffer(numel * elemSize);
           }
 
-          const t = new Tensor(val.dtype as DType, val.dims, this.#device, buffer);
-          ctx.setTensor(i, t);
+          ctx.setTensor(i, val.dtype, val.dims, buffer);
+          const t = ctx.getTensor(i);
 
           // Upload constant weight data if present
           if (val.constantId >= 0 && val.constantId < delegate.constants.length) {
@@ -133,7 +133,7 @@ export class Model {
         if (!kernel) {
           throw new Error(`Unsupported ExecuTorch operator: '${op.name}'`);
         }
-        kernel.dispatchIn(ctx, op.args);
+        kernel.recordIn(ctx, op.args);
       }
 
       this.#plans.set(methodName, {
@@ -178,8 +178,7 @@ export class Model {
         if (expectedVal.kind !== 'tensor') {
           throw new Error(`Input ${idx} expected scalar but received Tensor`);
         }
-        const targetTensor = plan.context.getTensor(targetId);
-        targetTensor.setData(input.buffer);
+        plan.context.getTensor(targetId).setData(input.buffer);
       } else if (typeof input === 'number') {
         plan.context.setScalar(targetId, input);
       }

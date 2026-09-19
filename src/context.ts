@@ -2,6 +2,10 @@ import type { Kernel } from './kernel';
 import type { WgpuDispatch } from './dispatch';
 import { Tensor, type DType, type TypedArray } from './tensor';
 
+const UNIFORM_BUFFER_USAGE = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+const STORAGE_BUFFER_USAGE =
+  GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+
 /**
  * Execution context that manages GPU tensors, uniform buffers,
  * and the sequence of recorded kernel dispatches.
@@ -41,14 +45,35 @@ export class WgpuExecutionContext {
 
   /**
    * Sets or replaces a tensor value in the context.
-   * @param id Identifier of the value.
-   * @param t The Tensor instance.
-   * @returns This context for chaining.
+   *
+   * Accepts either an existing {@link Tensor} instance, or attributes (`dtype`,
+   * `shape`, `src?`) to instantiate and track a new context-owned Tensor.
+   *
+   * @param id Identifier of the value in the context.
+   * @param tensorOrDtype An existing Tensor, or the DType of a new tensor to create.
+   * @param shape Dimensions of the tensor when creating a new one.
+   * @param src Optional initial host data or existing GPUBuffer to wrap.
+   * @returns This context instance.
    */
-  setTensor(id: PropertyKey, t: Tensor): this {
-    if (t.device !== this.#device) {
-      throw new Error('WgpuExecutionContext: Tensor device mismatch');
+  setTensor(id: PropertyKey, tensor: Tensor): this;
+  // prettier-ignore
+  setTensor(id: PropertyKey, dtype: DType, shape: readonly number[], src?: GPUBuffer | TypedArray): this;
+  // prettier-ignore
+  setTensor(id: PropertyKey, v: Tensor | DType, shape?: readonly number[], src?: GPUBuffer | TypedArray): this {
+    if (v instanceof Tensor) {
+      if (v.device !== this.#device) {
+        throw new Error('WgpuExecutionContext: Tensor device mismatch');
+      }
+      this.#tensors.set(id, v);
+      return this;
     }
+
+    if (shape === undefined) {
+      throw new Error('WgpuExecutionContext: Tensor shape is required');
+    }
+
+    const t = new Tensor(v, shape, this.#device, src);
+    this.ownBuffer(t.buffer);
     this.#tensors.set(id, t);
     return this;
   }
@@ -67,29 +92,14 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Sets a scalar constant in the context.
+   * Sets or replaces a scalar constant in the context.
    * @param id Identifier of the scalar.
    * @param val The numeric value.
-   * @returns This context for chaining.
+   * @returns This context instance.
    */
   setScalar(id: PropertyKey, val: number): this {
     this.#scalars.set(id, val);
     return this;
-  }
-
-  /**
-   * Creates a new Tensor whose underlying GPUBuffer is automatically tracked
-   * and released when this execution context is destroyed.
-   *
-   * @param dtype Data type of elements.
-   * @param shape Dimensions of the tensor (rank <= 8).
-   * @param src Optional initial host data or existing GPUBuffer to wrap.
-   * @returns A newly created context-owned Tensor instance.
-   */
-  tensor(dtype: DType, shape: readonly number[], src?: GPUBuffer | TypedArray): Tensor {
-    const t = new Tensor(dtype, shape, this.#device, src);
-    this.ownBuffer(t.buffer);
-    return t;
   }
 
   /**
@@ -100,11 +110,7 @@ export class WgpuExecutionContext {
    */
   storageBuffer(size: number): GPUBuffer {
     const alignedSize = Math.max(4, Math.ceil(size / 4) * 4);
-    const buffer = this.#device.createBuffer({
-      size: alignedSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-    });
-
+    const buffer = this.#device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
     this.ownBuffer(buffer);
     return buffer;
   }
@@ -119,11 +125,7 @@ export class WgpuExecutionContext {
   uniformBuffer(data: ArrayBufferView | ArrayBuffer): GPUBuffer {
     const byteLength = data.byteLength;
     const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
-
-    const buffer = this.#device.createBuffer({
-      size: alignedSize,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
+    const buffer = this.#device.createBuffer({ size: alignedSize, usage: UNIFORM_BUFFER_USAGE });
 
     if (data instanceof ArrayBuffer) {
       this.#device.queue.writeBuffer(buffer, 0, data, 0, byteLength);
@@ -153,14 +155,14 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Dispatches a compute kernel into this context.
+   * Records a compute kernel dispatch into this context.
    *
    * @param kernel The compute kernel to execute.
    * @param args Positional argument IDs referring to entries in this context.
-   * @returns This context for chaining.
+   * @returns This context instance.
    */
-  dispatch<TArgs extends readonly PropertyKey[]>(kernel: Kernel<TArgs>, args: TArgs): this {
-    kernel.dispatchIn(this, args);
+  record<TArgs extends readonly PropertyKey[]>(kernel: Kernel<TArgs>, args: TArgs): this {
+    kernel.recordIn(this, args);
     return this;
   }
 

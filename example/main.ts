@@ -100,13 +100,12 @@ runBtn.addEventListener('click', async () => {
     const xData = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     const yData = new Float32Array([10.0, 20.0, 30.0]);
 
-    const ctx = new WgpuExecutionContext(device);
-    ctx
-      .setTensor('in1', ctx.tensor('float32', [2, 3], xData))
-      .setTensor('in2', ctx.tensor('float32', [1, 3], yData))
+    const ctx = new WgpuExecutionContext(device)
+      .setTensor('in1', 'float32', [2, 3], xData)
+      .setTensor('in2', 'float32', [1, 3], yData)
       .setScalar('alpha', 2.0)
-      .setTensor('out', ctx.tensor('float32', [2, 3]))
-      .dispatch(kernels.add, ['in1', 'in2', 'alpha', 'out']);
+      .setTensor('out', 'float32', [2, 3])
+      .record(kernels.add, ['in1', 'in2', 'alpha', 'out']);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -148,10 +147,10 @@ runBtn.addEventListener('click', async () => {
 
     const mmCtx = new WgpuExecutionContext(device);
     mmCtx
-      .setTensor('a', mmCtx.tensor('float32', [2, 3], aData))
-      .setTensor('b', mmCtx.tensor('float32', [3, 2], bData))
-      .setTensor('out', mmCtx.tensor('float32', [2, 2]))
-      .dispatch(kernels.mm, ['a', 'b', 'out']);
+      .setTensor('a', 'float32', [2, 3], aData)
+      .setTensor('b', 'float32', [3, 2], bData)
+      .setTensor('out', 'float32', [2, 2])
+      .record(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
@@ -191,10 +190,10 @@ runBtn.addEventListener('click', async () => {
 
     const vecCtx = new WgpuExecutionContext(device);
     vecCtx
-      .setTensor('a', vecCtx.tensor('float32', [4, 4], aData4x4))
-      .setTensor('b', vecCtx.tensor('float32', [4, 4], bData4x4))
-      .setTensor('out', vecCtx.tensor('float32', [4, 4]))
-      .dispatch(kernels.mm, ['a', 'b', 'out']);
+      .setTensor('a', 'float32', [4, 4], aData4x4)
+      .setTensor('b', 'float32', [4, 4], bData4x4)
+      .setTensor('out', 'float32', [4, 4])
+      .record(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
@@ -262,10 +261,10 @@ runBtn.addEventListener('click', async () => {
     log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
     const benchCtx = new WgpuExecutionContext(device);
     benchCtx
-      .setTensor('a', benchCtx.tensor('float32', [benchDim, benchDim], aFloats))
-      .setTensor('b', benchCtx.tensor('float32', [benchDim, benchDim], bFloats))
-      .setTensor('out', benchCtx.tensor('float32', [benchDim, benchDim]))
-      .dispatch(kernels.mm, ['a', 'b', 'out']);
+      .setTensor('a', 'float32', [benchDim, benchDim], aFloats)
+      .setTensor('b', 'float32', [benchDim, benchDim], bFloats)
+      .setTensor('out', 'float32', [benchDim, benchDim])
+      .record(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
@@ -366,10 +365,10 @@ runBtn.addEventListener('click', async () => {
     log(`22. Uploading 2047x2047 test matrices to WebGPU VRAM...`);
     const oddCtx = new WgpuExecutionContext(device);
     oddCtx
-      .setTensor('a', oddCtx.tensor('float32', [oddM, oddK], aOddFloats))
-      .setTensor('b', oddCtx.tensor('float32', [oddK, oddN], bOddFloats))
-      .setTensor('out', oddCtx.tensor('float32', [oddM, oddN]))
-      .dispatch(kernels.mm, ['a', 'b', 'out']);
+      .setTensor('a', 'float32', [oddM, oddK], aOddFloats)
+      .setTensor('b', 'float32', [oddK, oddN], bOddFloats)
+      .setTensor('out', 'float32', [oddM, oddN])
+      .record(kernels.mm, ['a', 'b', 'out']);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check

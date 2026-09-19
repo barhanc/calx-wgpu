@@ -9,11 +9,9 @@
  */
 
 import { ByteBuffer } from 'flatbuffers';
+import type { DType } from './tensor';
 
-export type VkDataType =
-  'bool' | 'uint8' | 'int8' | 'int32' | 'float16' | 'float32' | 'float64' | 'int64';
-
-export const VK_DATA_TYPE_MAP: Record<number, VkDataType> = {
+export const VK_DATA_TYPE_MAP: Record<number, DType> = {
   0: 'bool',
   1: 'uint8',
   2: 'int8',
@@ -26,7 +24,7 @@ export const VK_DATA_TYPE_MAP: Record<number, VkDataType> = {
 
 export type ParsedVkTensor = {
   readonly kind: 'tensor';
-  readonly dtype: VkDataType;
+  readonly dtype: DType;
   readonly dims: readonly number[];
   readonly constantId: number;
   readonly memObjId: number;

@@ -1,12 +1,14 @@
 /**
  * Supported tensor data types in WebGPU storage buffers.
  */
-export type DType = 'float32' | 'float16' | 'int32' | 'int8' | 'uint8' | 'bool';
+export type DType =
+  'float32' | 'float16' | 'int32' | 'int8' | 'uint8' | 'bool' | 'float64' | 'int64';
 
 /**
  * Supported typed arrays that can be uploaded to a Tensor.
  */
-export type TypedArray = Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array;
+export type TypedArray =
+  Float32Array | Int32Array | Int8Array | Uint8Array | Uint16Array | Float64Array | BigInt64Array;
 
 /**
  * Maximum tensor rank supported by WebGPU kernels (std140 layout limit).
@@ -18,10 +20,10 @@ export const DTYPE_BYTESIZE: Record<DType, number> = {
   float32: 4, float16: 2,
   int32:   4, int8:    1,
   uint8:   1, bool:    1,
+  float64: 8, int64:   8,
 } as const;
 
-const STAGING_BUFFER_USAGE = // prettier-ignore
-  GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
+const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
 const STORAGE_BUFFER_USAGE =
   GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
@@ -124,10 +126,10 @@ export class Tensor {
    * storage buffer.
    *
    * @param src Source TypedArray or GPUBuffer to copy from.
-   * @throws {Error} If source byte size does not match this tensor's byte
-   * length.
+   * @returns This tensor instance.
+   * @throws {Error} If source byte size does not match this tensor's byte length.
    */
-  setData(src: GPUBuffer | TypedArray): void {
+  setData(src: GPUBuffer | TypedArray): this {
     const byteLength = this.byteLength;
     if (src instanceof GPUBuffer) {
       if (src.size < byteLength) {
@@ -141,13 +143,14 @@ export class Tensor {
       const encoder = this.#device.createCommandEncoder();
       encoder.copyBufferToBuffer(src, 0, this.#buffer, 0, byteLength);
       this.#device.queue.submit([encoder.finish()]);
-      return;
+      return this;
     }
 
     if (src.byteLength !== byteLength) {
       throw new Error(`Source bytes (${src.byteLength}B) !== tensor byteLength (${byteLength}B)`);
     }
     this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
+    return this;
   }
 
   /**

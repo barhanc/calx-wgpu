@@ -78,7 +78,7 @@ export type AddArgs =
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */
-function dispatchIn(ctx: WgpuExecutionContext, args: AddArgs): void {
+function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
   const in1 = ctx.getTensor(args[0]);
   const in2 = ctx.getTensor(args[1]);
   const out = ctx.getTensor(args[args.length - 1]);
@@ -135,5 +135,5 @@ function dispatchIn(ctx: WgpuExecutionContext, args: AddArgs): void {
 export const add: Kernel<AddArgs> = {
   name: NAME,
   wgsl: SHADER,
-  dispatchIn,
+  recordIn,
 };

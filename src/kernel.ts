@@ -9,13 +9,13 @@ import type { WgpuExecutionContext } from './context';
  * 2. Its raw WebGPU Shading Language source code (`wgsl`), which can be a single
  *    shader string or a record of named shader variants
  *    (e.g. `{ tiled: string, vec4: string }`).
- * 3. Its dispatch construction logic (`dispatchIn`), which validates input/output
+ * 3. Its record construction logic (`recordIn`), which validates input/output
  *    tensors, allocates shape metadata uniform buffers, compiles or retrieves
  *    cached compute pipelines, and records the resulting compute dispatch into
  *    the given {@link WgpuExecutionContext}.
  *
  * @typeParam TArgs The tuple schema of value IDs accepted by this kernel's
- * {@link dispatchIn} method.
+ * {@link recordIn} method.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Kernel<TArgs extends readonly PropertyKey[] = any> = {
@@ -44,5 +44,5 @@ export type Kernel<TArgs extends readonly PropertyKey[] = any> = {
    * @throws {Error} If arguments are invalid, dtypes mismatch, or shapes are
    * not broadcastable.
    */
-  readonly dispatchIn: (ctx: WgpuExecutionContext, args: TArgs) => void;
+  readonly recordIn: (ctx: WgpuExecutionContext, args: TArgs) => void;
 };

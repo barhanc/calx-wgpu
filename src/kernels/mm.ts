@@ -205,7 +205,7 @@ export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: Property
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */
-function dispatchIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
+function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
   const a = ctx.getTensor(in1Id);
   const b = ctx.getTensor(in2Id);
   const out = ctx.getTensor(outId);
@@ -266,5 +266,5 @@ function dispatchIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): v
 export const mm: Kernel<MmArgs> = {
   name: NAME,
   wgsl: { tiled: SHADER_TILED, vec4: SHADER_VEC4 },
-  dispatchIn,
+  recordIn,
 };
