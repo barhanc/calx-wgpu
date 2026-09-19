@@ -9,3 +9,4 @@ coverage
 third-party/
 .vscode/
 *.pte
+.venv/

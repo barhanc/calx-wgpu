@@ -3,7 +3,5 @@ export * from './device';
 export * from './context';
 export * from './shader';
 export * from './dispatch';
-export * from './parser';
-export * from './model';
 
 export * from './shaders';

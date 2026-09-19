@@ -1,11 +1,4 @@
-import {
-  initDevice,
-  isWebGPUSupported,
-  shaders,
-  Model,
-  Tensor,
-  WgpuExecutionContext,
-} from '../src';
+import { initDevice, isWebGPUSupported, shaders, Tensor, WgpuExecutionContext } from '../src';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const runBtn = document.getElementById('run-btn') as HTMLButtonElement;
@@ -441,42 +434,6 @@ runBtn.addEventListener('click', async () => {
     log('   ✅ Test G PASSED: 2047x2047 scalar tiled GEMM benchmark completed!');
 
     oddCtx.destroy();
-
-    log('\n--- Test H: End-to-End ExecuTorch .pte Model Execution ---');
-    log('14. Fetching and loading simple_add.pte model...');
-    const pteResponse = await fetch('/simple_add.pte');
-    if (!pteResponse.ok) {
-      throw new Error(`Failed to fetch /simple_add.pte: ${pteResponse.statusText}`);
-    }
-    const pteArrayBuffer = await pteResponse.arrayBuffer();
-    const model = Model.load(device, pteArrayBuffer);
-    log(`    Available methods in .pte: [${model.methodNames.join(', ')}]`);
-
-    const modelIn1Data = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-    const modelIn2Data = new Float32Array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0]);
-    const modelIn1 = new Tensor('float32', [2, 4], device, modelIn1Data);
-    const modelIn2 = new Tensor('float32', [2, 4], device, modelIn2Data);
-
-    log("15. Executing model.execute('forward', [in1, in2])...");
-    const outputs = await model.execute('forward', [modelIn1, modelIn2]);
-    const outTensor = outputs[0] as Tensor;
-    const modelOutBytes = await outTensor.getData();
-    const modelOutFloats = new Float32Array(modelOutBytes);
-    log(`    Output shape: [${outTensor.shape.join(', ')}]`);
-    log(`    Result: [${Array.from(modelOutFloats).join(', ')}]`);
-
-    const expectedAdd = modelIn1Data.map((v, i) => v + modelIn2Data[i]);
-    const matchesModel = modelOutFloats.every((v, i) => Math.abs(v - expectedAdd[i]) < 1e-5);
-    if (matchesModel) {
-      log('    ✅ Test H PASSED: ExecuTorch .pte model executed with 100% accuracy!');
-    } else {
-      log('    ❌ Test H FAILED: Model output does not match expected add!');
-    }
-
-    modelIn1.destroy();
-    modelIn2.destroy();
-    model.dispose();
-    log('    Model disposed.');
 
     log('\n🎉 All checks completed successfully!');
   } catch (err) {
