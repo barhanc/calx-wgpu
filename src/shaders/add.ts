@@ -1,8 +1,9 @@
 import type { Shader } from '../shader';
+import type { Tensor } from '../tensor';
 import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
-import { isBroadcastable } from './utils/broadcast';
+import { isBroadcastable } from './utils/broadcasting';
 import { encodeTensorMeta, TENSOR_META_WGSL } from './utils/meta';
 
 const name = 'aten.add.Tensor';
@@ -70,8 +71,8 @@ fn main(
  * Or 3-arg variant: `[in1, in2, out]`
  */
 export type AddArgs =
-  | readonly [in1: PropertyKey, in2: PropertyKey, out: PropertyKey]
-  | readonly [in1: PropertyKey, in2: PropertyKey, alpha: PropertyKey, out: PropertyKey];
+  | readonly [in1: Tensor, in2: Tensor, out: Tensor]
+  | readonly [in1: Tensor, in2: Tensor, alpha: number, out: Tensor];
 
 /**
  * Internal dispatch builder for `aten::add.Tensor`.
@@ -80,10 +81,10 @@ export type AddArgs =
  * @param args Positional argument tuple for the operator.
  */
 function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
-  const in1 = ctx.getTensor(args[0]);
-  const in2 = ctx.getTensor(args[1]);
-  const out = ctx.getTensor(args[args.length - 1]);
-  const alpha = args.length === 4 ? ctx.getScalar(args[2]) : 1.0;
+  const in1 = args[0];
+  const in2 = args[1];
+  const out = args[args.length - 1] as Tensor;
+  const alpha = args.length === 4 ? (args[2] as number) : 1.0;
 
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${name}: Only float32 tensors are currently supported`);
@@ -99,6 +100,7 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
 
   const device = ctx.device;
   const wgSize = 256;
+
   const totalWorkgroups = Math.ceil(out.numel / wgSize);
   const workgroupCountX = Math.min(totalWorkgroups, 65535);
   const workgroupCountY = Math.ceil(totalWorkgroups / 65535);
@@ -107,9 +109,9 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
     device,
     SHADER,
     [
-      { binding: 0, buffer: in1.buffer },
-      { binding: 1, buffer: in2.buffer },
-      { binding: 2, buffer: out.buffer },
+      { binding: 0, buffer: in1.buffer, offset: in1.byteOffset, size: in1.byteLength },
+      { binding: 1, buffer: in2.buffer, offset: in2.byteOffset, size: in2.byteLength },
+      { binding: 2, buffer: out.buffer, offset: out.byteOffset, size: out.byteLength },
       { binding: 3, buffer: outMetaBuffer },
       { binding: 4, buffer: in1MetaBuffer },
       { binding: 5, buffer: in2MetaBuffer },

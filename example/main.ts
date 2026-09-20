@@ -34,8 +34,13 @@ runBtn.addEventListener('click', async () => {
     log(`   Shape: [${shapeA.join(', ')}]`);
     log(`   Data:  [${Array.from(rawDataA).join(', ')}]`);
 
-    log('3. Allocating WebGPU Tensor (uploading to VRAM)...');
-    const tensorA = new Tensor('float32', shapeA, device, rawDataA);
+    log('3. Allocating GPUBuffer and creating non-owning Tensor view...');
+    const bufferA = device.createBuffer({
+      size: Math.max(16, rawDataA.byteLength),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(bufferA, 0, rawDataA.buffer, rawDataA.byteOffset, rawDataA.byteLength);
+    const tensorA = new Tensor('float32', shapeA, device, bufferA);
     log(`   VRAM buffer allocated (size: ${tensorA.buffer.size} bytes)`);
 
     log('4. Reading data back from GPU via tensorA.getData()...');
@@ -50,42 +55,60 @@ runBtn.addEventListener('click', async () => {
       log('   ❌ Test A FAILED: GPU readback does not match input!');
     }
 
-    tensorA.destroy();
+    bufferA.destroy();
     log('   Buffer destroyed.');
 
-    log('\n--- Test B: Tensor from existing GPUBuffer (Zero-Copy) ---');
+    log('\n--- Test B: Tensor from existing GPUBuffer (Zero-Copy with Sub-Slice Offset) ---');
     log('5. Allocating external GPUBuffer directly on device...');
     const shapeB = [4] as const;
     const rawDataB = new Int32Array([10, -20, 30, -40]);
-    const byteLengthB = rawDataB.byteLength;
 
+    // Allocate 32 bytes and place tensor at byteOffset = 16 (aligned to 4 bytes)
     const externalBuffer = device.createBuffer({
-      size: Math.max(16, byteLengthB),
+      size: 32,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(externalBuffer, 0, rawDataB.buffer, rawDataB.byteOffset, byteLengthB);
+    const tensorB = new Tensor('int32', shapeB, device, externalBuffer, 16);
+    // Write data directly into tensorB slice using setData
+    tensorB.setData(rawDataB);
     log(`   External GPUBuffer created (size: ${externalBuffer.size} bytes)`);
-
-    log('6. Wrapping external GPUBuffer into Tensor...');
-    const tensorB = new Tensor('int32', shapeB, device, externalBuffer);
     log(
-      `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer})`
+      `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer}, byteOffset: ${tensorB.byteOffset})`
     );
 
-    log('7. Reading data back from wrapped GPUBuffer via tensorB.getData()...');
+    log('7. Reading data back from wrapped sub-slice via tensorB.getData()...');
     const arrayBufferB = await tensorB.getData();
     const resultB = new Int32Array(arrayBufferB);
     log(`   Result: [${Array.from(resultB).join(', ')}]`);
 
     const matchesB = rawDataB.every((val, idx) => val === resultB[idx]);
     if (matchesB) {
-      log('   ✅ Test B PASSED: GPUBuffer wrapped and read back correctly!');
+      log('   ✅ Test B PASSED: GPUBuffer sub-slice wrapped and read back correctly!');
     } else {
       log('   ❌ Test B FAILED: Readback does not match input!');
     }
 
-    tensorB.destroy();
-    log('   External buffer destroyed via tensorB.destroy().');
+    log('7b. Testing GPUBuffer-to-GPUBuffer sub-slice setData with srcOffset...');
+    const srcGpuBuffer = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    const updatedDataB = new Int32Array([100, 200, 300, 400]);
+    device.queue.writeBuffer(srcGpuBuffer, 8, updatedDataB.buffer, updatedDataB.byteOffset, 16);
+    // Copy tensorB.byteLength bytes from srcGpuBuffer at offset 8 into tensorB
+    tensorB.setData(srcGpuBuffer, 8);
+    const updatedArrayBufferB = await tensorB.getData();
+    const updatedResultB = new Int32Array(updatedArrayBufferB);
+    const matchesB2 = updatedDataB.every((val, idx) => val === updatedResultB[idx]);
+    if (matchesB2) {
+      log('   ✅ Test B2 PASSED: GPUBuffer sub-slice copy with srcOffset verified!');
+    } else {
+      log('   ❌ Test B2 FAILED: GPUBuffer copy slice mismatch!');
+    }
+    srcGpuBuffer.destroy();
+
+    externalBuffer.destroy();
+    log('   External buffer destroyed.');
 
     log('\n--- Test C: Context Execution of aten.add.Tensor ---');
     log('8. Building WgpuExecutionContext with input tensors and alpha constant...');
@@ -93,12 +116,15 @@ runBtn.addEventListener('click', async () => {
     const xData = new Float32Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     const yData = new Float32Array([10.0, 20.0, 30.0]);
 
-    const ctx = new WgpuExecutionContext(device)
-      .setTensor('in1', 'float32', [2, 3], xData)
-      .setTensor('in2', 'float32', [1, 3], yData)
-      .setScalar('alpha', 2.0)
-      .setTensor('out', 'float32', [2, 3])
-      .record(shaders.add, ['in1', 'in2', 'alpha', 'out']);
+    const ctx = new WgpuExecutionContext(device);
+
+    // Create tensors via context factory and upload initial data
+    const in1 = ctx.tensor('float32', [2, 3]).setData(xData);
+    const in2 = ctx.tensor('float32', [1, 3]).setData(yData);
+    const out = ctx.tensor('float32', [2, 3]);
+
+    // Record with direct typed arguments: [in1, in2, alpha, out]
+    ctx.record(shaders.add, [in1, in2, 2.0, out]);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -107,10 +133,10 @@ runBtn.addEventListener('click', async () => {
     await device.queue.onSubmittedWorkDone();
     const durationMs = performance.now() - t0;
     log(`   Execution completed in ${durationMs.toFixed(3)}ms (GPU queue wall-time)`);
-    log(`   Out shape: [${ctx.getTensor('out').shape.join(', ')}]`);
+    log(`   Out shape: [${out.shape.join(', ')}]`);
 
     log('10. Reading back compute shader output...');
-    const outBytes = await ctx.getTensor('out').getData();
+    const outBytes = await out.getData();
     const outFloats = new Float32Array(outBytes);
     log(`   Result: [${Array.from(outFloats).join(', ')}]`);
 
@@ -128,11 +154,11 @@ runBtn.addEventListener('click', async () => {
 
     log('10b. Re-executing context without recreating: updating in1 data and submitting again...');
     const xData2 = new Float32Array([100.0, 200.0, 300.0, 400.0, 500.0, 600.0]);
-    ctx.getTensor('in1').setData(xData2);
+    in1.setData(xData2);
     ctx.submit();
     await device.queue.onSubmittedWorkDone();
 
-    const outBytes2 = await ctx.getTensor('out').getData();
+    const outBytes2 = await out.getData();
     const outFloats2 = new Float32Array(outBytes2);
     log(`   Re-run Result: [${Array.from(outFloats2).join(', ')}]`);
 
@@ -160,11 +186,12 @@ runBtn.addEventListener('click', async () => {
     const bData = new Float32Array([7.0, 8.0, 9.0, 1.0, 2.0, 3.0]);
 
     const mmCtx = new WgpuExecutionContext(device);
-    mmCtx
-      .setTensor('a', 'float32', [2, 3], aData)
-      .setTensor('b', 'float32', [3, 2], bData)
-      .setTensor('out', 'float32', [2, 2])
-      .record(shaders.mm, ['a', 'b', 'out']);
+
+    const mmA = mmCtx.tensor('float32', [2, 3]).setData(aData);
+    const mmB = mmCtx.tensor('float32', [3, 2]).setData(bData);
+    const mmOut = mmCtx.tensor('float32', [2, 2]);
+
+    mmCtx.record(shaders.mm, [mmA, mmB, mmOut]);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
@@ -175,7 +202,7 @@ runBtn.addEventListener('click', async () => {
     log(`   Execution completed in ${mmDurationMs.toFixed(3)}ms (GPU queue wall-time)`);
 
     log('13. Reading back matmul output...');
-    const mmBytes = await mmCtx.getTensor('out').getData();
+    const mmBytes = await mmOut.getData();
     const mmFloats = new Float32Array(mmBytes);
     log(`   Result: [${Array.from(mmFloats).join(', ')}]`);
 
@@ -203,11 +230,12 @@ runBtn.addEventListener('click', async () => {
     const bData4x4 = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
     const vecCtx = new WgpuExecutionContext(device);
-    vecCtx
-      .setTensor('a', 'float32', [4, 4], aData4x4)
-      .setTensor('b', 'float32', [4, 4], bData4x4)
-      .setTensor('out', 'float32', [4, 4])
-      .record(shaders.mm, ['a', 'b', 'out']);
+
+    const vecA = vecCtx.tensor('float32', [4, 4]).setData(aData4x4);
+    const vecB = vecCtx.tensor('float32', [4, 4]).setData(bData4x4);
+    const vecOut = vecCtx.tensor('float32', [4, 4]);
+
+    vecCtx.record(shaders.mm, [vecA, vecB, vecOut]);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
@@ -218,7 +246,7 @@ runBtn.addEventListener('click', async () => {
     log(`   Execution completed in ${vecDurationMs.toFixed(3)}ms (GPU queue wall-time)`);
 
     log('16. Reading back vectorized output...');
-    const vecBytes = await vecCtx.getTensor('out').getData();
+    const vecBytes = await vecOut.getData();
     const vecFloats = new Float32Array(vecBytes);
     log(`   Result: [${Array.from(vecFloats).join(', ')}]`);
 
@@ -274,11 +302,11 @@ runBtn.addEventListener('click', async () => {
 
     log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
     const benchCtx = new WgpuExecutionContext(device);
-    benchCtx
-      .setTensor('a', 'float32', [benchDim, benchDim], aFloats)
-      .setTensor('b', 'float32', [benchDim, benchDim], bFloats)
-      .setTensor('out', 'float32', [benchDim, benchDim])
-      .record(shaders.mm, ['a', 'b', 'out']);
+    const benchA = benchCtx.tensor('float32', [benchDim, benchDim]).setData(aFloats);
+    const benchB = benchCtx.tensor('float32', [benchDim, benchDim]).setData(bFloats);
+    const benchOut = benchCtx.tensor('float32', [benchDim, benchDim]);
+
+    benchCtx.record(shaders.mm, [benchA, benchB, benchOut]);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
@@ -286,7 +314,7 @@ runBtn.addEventListener('click', async () => {
     benchCtx.submit();
     await device.queue.onSubmittedWorkDone();
 
-    const actualOutBytes = await benchCtx.getTensor('out').getData();
+    const actualOutBytes = await benchOut.getData();
     const actualFloats = new Float32Array(actualOutBytes);
 
     // Verify sample coordinates against NumPy reference
@@ -378,11 +406,11 @@ runBtn.addEventListener('click', async () => {
 
     log(`22. Uploading 2047x2047 test matrices to WebGPU VRAM...`);
     const oddCtx = new WgpuExecutionContext(device);
-    oddCtx
-      .setTensor('a', 'float32', [oddM, oddK], aOddFloats)
-      .setTensor('b', 'float32', [oddK, oddN], bOddFloats)
-      .setTensor('out', 'float32', [oddM, oddN])
-      .record(shaders.mm, ['a', 'b', 'out']);
+    const oddA = oddCtx.tensor('float32', [oddM, oddK]).setData(aOddFloats);
+    const oddB = oddCtx.tensor('float32', [oddK, oddN]).setData(bOddFloats);
+    const oddOut = oddCtx.tensor('float32', [oddM, oddN]);
+
+    oddCtx.record(shaders.mm, [oddA, oddB, oddOut]);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check
@@ -390,7 +418,7 @@ runBtn.addEventListener('click', async () => {
     oddCtx.submit();
     await device.queue.onSubmittedWorkDone();
 
-    const actualOddBytes = await oddCtx.getTensor('out').getData();
+    const actualOddBytes = await oddOut.getData();
     const actualOddFloats = new Float32Array(actualOddBytes);
 
     const checkOdd00 = Math.abs(actualOddFloats[0] - metaOdd.sample_0_0);

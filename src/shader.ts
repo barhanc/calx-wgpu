@@ -1,14 +1,14 @@
 import type { WgpuExecutionContext } from './context';
 
 /**
- * Represents a GPU compute shader in the ExecuTorch WebGPU execution engine.
+ * Represents a GPU compute shader in the WebGPU execution engine.
  *
- * @typeParam TArgs The tuple schema of value IDs accepted by this shader's
+ * @typeParam TArgs The tuple schema of arguments accepted by this shader's
  * {@link recordIn} method.
  * @typeParam TName Literal string type of the operator name.
  */
 export type Shader<
-  TArgs extends readonly PropertyKey[] = readonly PropertyKey[],
+  TArgs extends readonly unknown[] = readonly unknown[],
   TName extends string = string,
 > = {
   /**
@@ -28,7 +28,7 @@ export type Shader<
    * compiles or retrieves cached pipelines, and records the dispatch.
    *
    * @param ctx The execution context to record dispatches into.
-   * @param args Positional value IDs of inputs and outputs for the operator.
+   * @param args Positional arguments for the operator.
    */
   readonly recordIn: (ctx: WgpuExecutionContext, args: TArgs) => void;
 };

@@ -1,4 +1,5 @@
 import type { Shader } from '../shader';
+import type { Tensor } from '../tensor';
 import type { WgpuExecutionContext } from '../context';
 import { createComputeBundle } from '../dispatch';
 
@@ -198,7 +199,7 @@ const TILE = 32;
  * Positional argument tuple for `aten::mm.default`:
  * `[in1, in2, out]`
  */
-export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: PropertyKey];
+export type MmArgs = readonly [in1: Tensor, in2: Tensor, out: Tensor];
 
 /**
  * Internal dispatch builder for `aten::mm.default`.
@@ -206,15 +207,10 @@ export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: Property
  * @param ctx The execution context.
  * @param args Positional argument tuple for the operator.
  */
-function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
-  const in1 = ctx.getTensor(in1Id);
-  const in2 = ctx.getTensor(in2Id);
-  const out = ctx.getTensor(outId);
-
+function recordIn(ctx: WgpuExecutionContext, [in1, in2, out]: MmArgs): void {
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${name}: Only float32 tensors are currently supported`);
   }
-
   if (in1.shape.length !== 2 || in2.shape.length !== 2 || out.shape.length !== 2) {
     throw new Error(`${name}: Tensors must be 2D matrices`);
   }
@@ -226,7 +222,6 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   if (k1 !== k2) {
     throw new Error(`${name}: Matrix inner dimensions must match (${k1} !== ${k2})`);
   }
-
   if (outM !== m || outN !== n) {
     throw new Error(`${name}: Output shape [${outM}, ${outN}] !== expected [${m}, ${n}]`);
   }
@@ -242,9 +237,9 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   const code = useVec4 ? SHADER_VEC4 : SHADER_TILED;
 
   const bundle = createComputeBundle(device, code, [
-    { binding: 0, buffer: in1.buffer },
-    { binding: 1, buffer: in2.buffer },
-    { binding: 2, buffer: out.buffer },
+    { binding: 0, buffer: in1.buffer, offset: in1.byteOffset, size: in1.byteLength },
+    { binding: 1, buffer: in2.buffer, offset: in2.byteOffset, size: in2.byteLength },
+    { binding: 2, buffer: out.buffer, offset: out.byteOffset, size: out.byteLength },
     { binding: 3, buffer: paramsBuffer },
   ]);
 
