@@ -1,5 +1,5 @@
 {
-  "name": "phlox-wgpu",
+  "name": "calx-wgpu",
   "version": "0.1.0",
   "description": "Pure WebGPU inference runtime for PyTorch ExecuTorch .pte models in TypeScript",
   "main": "./dist/index.cjs",
@@ -52,12 +52,12 @@
   "files": [
     "dist"
   ],
-  "homepage": "https://github.com/barhanc/phlox-wgpu",
+  "homepage": "https://github.com/barhanc/calx-wgpu",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/barhanc/phlox-wgpu.git"
+    "url": "git+https://github.com/barhanc/calx-wgpu.git"
   },
   "bugs": {
-    "url": "https://github.com/barhanc/phlox-wgpu/issues"
+    "url": "https://github.com/barhanc/calx-wgpu/issues"
   }
 }

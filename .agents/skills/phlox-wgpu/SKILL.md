@@ -1,15 +1,15 @@
 ---
-name: phlox-wgpu
+name: calx-wgpu
 description: >-
-  Architecture, development guidelines, project scope, and next steps for the phlox-wgpu project.
+  Architecture, development guidelines, project scope, and next steps for the calx-wgpu project.
   Use when analyzing the runtime design, Tensor and context APIs, ExecuTorch delegate handling, or continuing development.
 ---
 
-# Phlox WebGPU (`phlox-wgpu`) Skill
+# Calx WebGPU (`calx-wgpu`) Skill
 
 ## Project Mission & Scope
 
-`phlox-wgpu` is a pure TypeScript / native WebGPU inference runtime for PyTorch ExecuTorch models (`.pte`).
+`calx-wgpu` is a pure TypeScript / native WebGPU inference runtime for PyTorch ExecuTorch models (`.pte`).
 It executes PyTorch computational graphs and delegates directly in web browsers and WebGPU-enabled JS runtimes without C++ compilation, Emscripten, or WebAssembly overhead.
 
 ### Key Tenets
