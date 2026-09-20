@@ -89,9 +89,7 @@ export class Tensor {
     return this.#device;
   }
 
-  /**
-   * The total byte size of the tensor data.
-   */
+  /** The total byte size of the tensor data. */
   get byteLength(): number {
     return this.#numel * DTYPE_BYTESIZE[this.#dtype];
   }
