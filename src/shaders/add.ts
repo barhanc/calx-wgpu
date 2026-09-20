@@ -81,10 +81,8 @@ export type AddArgs =
  * @param args Positional argument tuple for the operator.
  */
 function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
-  const in1 = args[0];
-  const in2 = args[1];
-  const out = args[args.length - 1] as Tensor;
-  const alpha = args.length === 4 ? (args[2] as number) : 1.0;
+  const [in1, in2] = args;
+  const [alpha, out] = args.length === 4 ? [args[2], args[3]] : [1.0, args[2]];
 
   if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${name}: Only float32 tensors are currently supported`);

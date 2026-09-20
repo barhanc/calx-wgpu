@@ -28,10 +28,11 @@ const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
 /**
  * A non-owning WebGPU-backed Tensor view.
  *
- * Encapsulates an interpretation of a slice of an allocated `GPUBuffer` in device VRAM
- * along with its metadata (`dtype`, `shape`, `numel`, `byteLength`, `byteOffset`).
- * Use {@link Tensor.getData} to read raw bytes back into host memory and {@link Tensor.setData}
- * to copy data into it. The underlying `GPUBuffer` lifetime is managed externally.
+ * Encapsulates an interpretation of a slice of an allocated `GPUBuffer` in
+ * device VRAM along with its metadata (`dtype`, `shape`, `numel`, `byteLength`,
+ * `byteOffset`). Use {@link Tensor.getData} to read raw bytes back into host
+ * memory and {@link Tensor.setData} to copy data into it. The underlying
+ * `GPUBuffer` lifetime is managed externally.
  */
 export class Tensor {
   readonly #dtype: DType;
@@ -119,7 +120,8 @@ export class Tensor {
    * slice in the underlying storage buffer.
    *
    * @param src Source TypedArray or GPUBuffer to copy from.
-   * @param srcOffset Optional byte offset into src to begin copying from (default: 0).
+   * @param srcOffset Optional byte offset into src to begin copying from
+   * (default: 0).
    * @returns This tensor instance.
    * @throws {Error} If offset or size boundaries exceed buffer limits.
    */
