@@ -57,20 +57,34 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Sets or replaces a tensor value in the context.
+   * Registers an existing Tensor instance in the context.
    *
-   * Accepts either an existing {@link Tensor} instance, or attributes (`dtype`,
-   * `shape`, `src?`) to instantiate and track a new context-owned Tensor.
+   * The tensor's device must match this context's device. The context does not
+   * take ownership of the buffer — call {@link Tensor.destroy} separately when
+   * the tensor is no longer needed.
    *
    * @param id Identifier of the value in the context.
-   * @param tensorOrDtype An existing Tensor, or the DType of a new tensor to create.
-   * @param shape Dimensions of the tensor when creating a new one.
-   * @param src Optional initial host data or existing GPUBuffer to wrap.
+   * @param tensor An existing Tensor instance.
    * @returns This context instance.
    */
   setTensor(id: PropertyKey, tensor: Tensor): this;
+
+  /**
+   * Creates a new context-owned Tensor and registers it.
+   *
+   * Allocates a GPUBuffer (or wraps an existing one) and optionally uploads
+   * initial data. The buffer's lifetime is managed by the context and it will
+   * be destroyed when {@link destroy} is called.
+   *
+   * @param id Identifier of the value in the context.
+   * @param dtype Element data type of the tensor.
+   * @param shape Dimensions of the tensor.
+   * @param src Optional initial host data or existing GPUBuffer to wrap.
+   * @returns This context instance.
+   */
   // prettier-ignore
   setTensor(id: PropertyKey, dtype: DType, shape: readonly number[], src?: GPUBuffer | TypedArray): this;
+
   // prettier-ignore
   setTensor(id: PropertyKey, v: Tensor | DType, shape?: readonly number[], src?: GPUBuffer | TypedArray): this {
     if (v instanceof Tensor) {

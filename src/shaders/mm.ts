@@ -207,24 +207,24 @@ export type MmArgs = readonly [in1: PropertyKey, in2: PropertyKey, out: Property
  * @param args Positional argument tuple for the operator.
  */
 function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): void {
-  const a = ctx.getTensor(in1Id);
-  const b = ctx.getTensor(in2Id);
+  const in1 = ctx.getTensor(in1Id);
+  const in2 = ctx.getTensor(in2Id);
   const out = ctx.getTensor(outId);
 
-  if (a.dtype !== 'float32' || b.dtype !== 'float32' || out.dtype !== 'float32') {
+  if (in1.dtype !== 'float32' || in2.dtype !== 'float32' || out.dtype !== 'float32') {
     throw new Error(`${name}: Only float32 tensors are currently supported`);
   }
 
-  if (a.shape.length !== 2 || b.shape.length !== 2 || out.shape.length !== 2) {
+  if (in1.shape.length !== 2 || in2.shape.length !== 2 || out.shape.length !== 2) {
     throw new Error(`${name}: Tensors must be 2D matrices`);
   }
 
-  const [m, kA] = a.shape as [number, number];
-  const [kB, n] = b.shape as [number, number];
+  const [m, k1] = in1.shape as [number, number];
+  const [k2, n] = in2.shape as [number, number];
   const [outM, outN] = out.shape as [number, number];
 
-  if (kA !== kB) {
-    throw new Error(`${name}: Matrix inner dimensions must match (${kA} !== ${kB})`);
+  if (k1 !== k2) {
+    throw new Error(`${name}: Matrix inner dimensions must match (${k1} !== ${k2})`);
   }
 
   if (outM !== m || outN !== n) {
@@ -232,18 +232,18 @@ function recordIn(ctx: WgpuExecutionContext, [in1Id, in2Id, outId]: MmArgs): voi
   }
 
   const device = ctx.device;
-  const paramsBuffer = ctx.uniformBuffer(new Uint32Array([m, n, kA, 0]));
+  const paramsBuffer = ctx.uniformBuffer(new Uint32Array([m, n, k1, 0]));
 
   const workgroupCountX = Math.ceil(n / TILE);
   const workgroupCountY = Math.ceil(m / TILE);
 
   // Use vectorized 128-bit memory loads when K and N are divisible by 4
-  const useVec4 = kA % 4 === 0 && n % 4 === 0;
+  const useVec4 = k1 % 4 === 0 && n % 4 === 0;
   const code = useVec4 ? SHADER_VEC4 : SHADER_TILED;
 
   const bundle = createComputeBundle(device, code, [
-    { binding: 0, buffer: a.buffer },
-    { binding: 1, buffer: b.buffer },
+    { binding: 0, buffer: in1.buffer },
+    { binding: 1, buffer: in2.buffer },
     { binding: 2, buffer: out.buffer },
     { binding: 3, buffer: paramsBuffer },
   ]);
