@@ -58,52 +58,51 @@ runBtn.addEventListener('click', async () => {
     bufferA.destroy();
     log('   Buffer destroyed.');
 
-    log('\n--- Test B: Tensor from existing GPUBuffer (Zero-Copy with Sub-Slice Offset) ---');
+    log('\n--- Test B: Tensor from existing GPUBuffer (Zero-Copy) ---');
     log('5. Allocating external GPUBuffer directly on device...');
     const shapeB = [4] as const;
     const rawDataB = new Int32Array([10, -20, 30, -40]);
 
-    // Allocate 32 bytes and place tensor at byteOffset = 16 (aligned to 4 bytes)
     const externalBuffer = device.createBuffer({
-      size: 32,
+      size: 16,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
-    const tensorB = new Tensor('int32', shapeB, device, externalBuffer, 16);
-    // Write data directly into tensorB slice using setData
+    const tensorB = new Tensor('int32', shapeB, device, externalBuffer);
+    // Write data directly into tensorB using setData
     tensorB.setData(rawDataB);
     log(`   External GPUBuffer created (size: ${externalBuffer.size} bytes)`);
     log(
-      `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer}, byteOffset: ${tensorB.byteOffset})`
+      `   Wrapped zero-copy (tensorB.buffer === externalBuffer: ${tensorB.buffer === externalBuffer})`
     );
 
-    log('7. Reading data back from wrapped sub-slice via tensorB.getData()...');
+    log('6. Reading data back from wrapped buffer via tensorB.getData()...');
     const arrayBufferB = await tensorB.getData();
     const resultB = new Int32Array(arrayBufferB);
     log(`   Result: [${Array.from(resultB).join(', ')}]`);
 
     const matchesB = rawDataB.every((val, idx) => val === resultB[idx]);
     if (matchesB) {
-      log('   ✅ Test B PASSED: GPUBuffer sub-slice wrapped and read back correctly!');
+      log('   ✅ Test B PASSED: GPUBuffer wrapped and read back correctly!');
     } else {
       log('   ❌ Test B FAILED: Readback does not match input!');
     }
 
-    log('7b. Testing GPUBuffer-to-GPUBuffer sub-slice setData with srcOffset...');
+    log('7. Testing GPUBuffer-to-GPUBuffer setData...');
     const srcGpuBuffer = device.createBuffer({
-      size: 32,
+      size: 16,
       usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
     const updatedDataB = new Int32Array([100, 200, 300, 400]);
-    device.queue.writeBuffer(srcGpuBuffer, 8, updatedDataB.buffer, updatedDataB.byteOffset, 16);
-    // Copy tensorB.byteLength bytes from srcGpuBuffer at offset 8 into tensorB
-    tensorB.setData(srcGpuBuffer, 8);
+    device.queue.writeBuffer(srcGpuBuffer, 0, updatedDataB.buffer, updatedDataB.byteOffset, 16);
+    // Copy tensorB.byteLength bytes from srcGpuBuffer into tensorB
+    tensorB.setData(srcGpuBuffer);
     const updatedArrayBufferB = await tensorB.getData();
     const updatedResultB = new Int32Array(updatedArrayBufferB);
     const matchesB2 = updatedDataB.every((val, idx) => val === updatedResultB[idx]);
     if (matchesB2) {
-      log('   ✅ Test B2 PASSED: GPUBuffer sub-slice copy with srcOffset verified!');
+      log('   ✅ Test B2 PASSED: GPUBuffer-to-GPUBuffer setData verified!');
     } else {
-      log('   ❌ Test B2 FAILED: GPUBuffer copy slice mismatch!');
+      log('   ❌ Test B2 FAILED: GPUBuffer copy mismatch!');
     }
     srcGpuBuffer.destroy();
 

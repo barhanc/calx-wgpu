@@ -107,9 +107,9 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
     device,
     SHADER,
     [
-      { binding: 0, buffer: in1.buffer, offset: in1.byteOffset, size: in1.byteLength },
-      { binding: 1, buffer: in2.buffer, offset: in2.byteOffset, size: in2.byteLength },
-      { binding: 2, buffer: out.buffer, offset: out.byteOffset, size: out.byteLength },
+      { binding: 0, buffer: in1.buffer },
+      { binding: 1, buffer: in2.buffer },
+      { binding: 2, buffer: out.buffer },
       { binding: 3, buffer: outMetaBuffer },
       { binding: 4, buffer: in1MetaBuffer },
       { binding: 5, buffer: in2MetaBuffer },

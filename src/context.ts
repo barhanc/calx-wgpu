@@ -109,28 +109,23 @@ export class WgpuExecutionContext {
    * 1. **`buffer` omitted**: The context allocates a fresh `GPUBuffer` via
    *    {@link storageBuffer}. This buffer is tracked and owned by the context,
    *    and will be destroyed when {@link destroy} is called on this context.
-   * 2. **`buffer` provided**: The context wraps the given `GPUBuffer` (at
-   *    `byteOffset`) without altering its lifecycle or ownership. If it was
-   *    already managed (e.g. via {@link storageBuffer}), it remains managed; if
-   *    it is external, its lifetime remains with the caller.
+   * 2. **`buffer` provided**: The context wraps the given `GPUBuffer` without
+   *    altering its lifecycle or ownership. If it was already managed (e.g. via
+   *    {@link storageBuffer}), it remains managed; if it is external, its
+   *    lifetime remains with the caller.
    *
    * @param dtype Element data type of the tensor.
    * @param shape Tensor dimensions.
-   * @param buffer Optional existing GPUBuffer to wrap. If omitted, the context allocates and owns a new buffer.
-   * @param byteOffset Optional byte offset in the buffer (defaults to 0, must be a multiple of 4).
+   * @param buffer Optional existing GPUBuffer to wrap. If omitted, the context
+   * allocates and owns a new buffer.
    * @returns A new Tensor view.
    */
-  tensor(
-    dtype: DType,
-    shape: readonly number[],
-    buffer?: GPUBuffer,
-    byteOffset: number = 0
-  ): Tensor {
+  tensor(dtype: DType, shape: readonly number[], buffer?: GPUBuffer): Tensor {
     if (this.#destroyed) {
       throw new Error('WgpuExecutionContext is destroyed');
     }
     if (buffer !== undefined) {
-      return new Tensor(dtype, shape, this.#device, buffer, byteOffset);
+      return new Tensor(dtype, shape, this.#device, buffer);
     }
     const numel = shape.reduce((a, b) => a * b, 1);
     const byteLength = numel * DTYPE_BYTESIZE[dtype];

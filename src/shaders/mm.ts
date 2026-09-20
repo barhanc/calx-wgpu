@@ -237,9 +237,9 @@ function recordIn(ctx: WgpuExecutionContext, [in1, in2, out]: MmArgs): void {
   const code = useVec4 ? SHADER_VEC4 : SHADER_TILED;
 
   const bundle = createComputeBundle(device, code, [
-    { binding: 0, buffer: in1.buffer, offset: in1.byteOffset, size: in1.byteLength },
-    { binding: 1, buffer: in2.buffer, offset: in2.byteOffset, size: in2.byteLength },
-    { binding: 2, buffer: out.buffer, offset: out.byteOffset, size: out.byteLength },
+    { binding: 0, buffer: in1.buffer },
+    { binding: 1, buffer: in2.buffer },
+    { binding: 2, buffer: out.buffer },
     { binding: 3, buffer: paramsBuffer },
   ]);
 
