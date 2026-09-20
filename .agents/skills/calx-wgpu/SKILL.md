@@ -59,7 +59,11 @@ It executes PyTorch computational graphs and delegates directly in web browsers 
      - Explicit input/output shape & dtype validation against the delegate graph before GPU dispatch.
      - Support caller-provided output `Tensor`s (zero allocation inference).
      - Clean lifecycle handling (`model.dispose()`, `#disposed` checks).
-3. **Operator Library Expansion**:
+3. **Testing Harness for Kernel Goldens (AI-Driven Development)**:
+   - Build an automated test harness to verify WGSL kernel outputs against PyTorch golden tensors.
+   - Run PyTorch offline / in CI to export ground-truth inputs & outputs for each op.
+   - Load goldens directly in WebGPU tests and verify exact / relative numerical tolerances across entire tensors.
+4. **Operator Library Expansion**:
    - Port operators from `third-party/executorch/backends/webgpu/runtime/ops/`:
      - Activations: `relu`, `gelu`, `silu`, `sigmoid`, `tanh`.
      - Math: `sub`, `mul`, `div`.
