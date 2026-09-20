@@ -106,21 +106,18 @@ export class WgpuExecutionContext {
    * Creates a Tensor view over a GPU buffer.
    *
    * Buffer ownership behavior:
-   * 1. **`buffer` omitted**: The context allocates a fresh `GPUBuffer` using
+   * 1. **`buffer` omitted**: The context allocates a fresh `GPUBuffer` via
    *    {@link storageBuffer}. This buffer is tracked and owned by the context,
-   *    and will be automatically destroyed when {@link destroy} is called on
-   *    this context.
-   * 2. **`buffer` provided**: The context wraps the provided external
-   *    `GPUBuffer` (at `byteOffset`) without taking ownership. The buffer's
-   *    lifetime is managed externally by the caller and will NOT be tracked or
-   *    destroyed by this context.
+   *    and will be destroyed when {@link destroy} is called on this context.
+   * 2. **`buffer` provided**: The context wraps the given `GPUBuffer` (at
+   *    `byteOffset`) without altering its lifecycle or ownership. If it was
+   *    already managed (e.g. via {@link storageBuffer}), it remains managed; if
+   *    it is external, its lifetime remains with the caller.
    *
    * @param dtype Element data type of the tensor.
    * @param shape Tensor dimensions.
-   * @param buffer Optional existing GPUBuffer to wrap. If omitted, the context
-   * allocates and owns a new buffer.
-   * @param byteOffset Optional byte offset in the buffer (defaults to 0, must
-   * be a multiple of 4).
+   * @param buffer Optional existing GPUBuffer to wrap. If omitted, the context allocates and owns a new buffer.
+   * @param byteOffset Optional byte offset in the buffer (defaults to 0, must be a multiple of 4).
    * @returns A new Tensor view.
    */
   tensor(
