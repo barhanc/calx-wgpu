@@ -47,7 +47,9 @@ export class WgpuExecutionContext {
     if (this.#destroyed) {
       return;
     }
+
     this.#destroyed = true;
+
     for (const buffer of this.#ownedBuffers) {
       buffer.destroy();
     }
