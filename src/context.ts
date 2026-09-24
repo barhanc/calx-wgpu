@@ -129,6 +129,7 @@ export class WgpuExecutionContext {
     if (buffer !== undefined) {
       return new Tensor(dtype, shape, this.#device, buffer);
     }
+
     const numel = shape.reduce((a, b) => a * b, 1);
     const byteLength = numel * DTYPE_BYTESIZE[dtype];
     const newBuffer = this.storageBuffer(byteLength);
