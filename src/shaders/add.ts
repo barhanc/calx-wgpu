@@ -114,7 +114,7 @@ function recordIn(ctx: WgpuExecutionContext, args: AddArgs): void {
       { binding: 4, buffer: in1MetaBuffer },
       { binding: 5, buffer: in2MetaBuffer },
     ],
-    // eslint-disable-next-line camelcase
+    // eslint-disable-next-line camelcase, @typescript-eslint/naming-convention
     { wg_size: wgSize, alpha }
   );
 

@@ -1,6 +1,9 @@
 import type { Shader } from './shader';
 import type { WgpuDispatch, WgpuCommand } from './command';
 import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
+import type { Program } from './program';
+import { resolveArgs } from './program';
+import { shaderRegistry } from './shaders';
 
 const UNIFORM_BUFFER_USAGE = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 const STORAGE_BUFFER_USAGE =
@@ -41,13 +44,23 @@ export class WgpuExecutionContext {
   }
 
   /**
+   * Throws if this context has been destroyed.
+   *
+   * @throws {Error} If {@link destroy} has been called.
+   */
+  #assertNotDestroyed(): void {
+    if (this.#destroyed) {
+      throw new Error('WgpuExecutionContext is destroyed');
+    }
+  }
+
+  /**
    * Destroys all owned buffers and releases resources.
    */
   destroy(): void {
     if (this.#destroyed) {
       return;
     }
-
     this.#destroyed = true;
 
     for (const buffer of this.#ownedBuffers) {
@@ -70,9 +83,7 @@ export class WgpuExecutionContext {
    * COPY_DST usage.
    */
   storageBuffer(size: number): GPUBuffer {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
     const alignedSize = Math.max(4, Math.ceil(size / 4) * 4);
     const buffer = this.#device.createBuffer({ size: alignedSize, usage: STORAGE_BUFFER_USAGE });
     this.#ownBuffer(buffer);
@@ -87,9 +98,8 @@ export class WgpuExecutionContext {
    * @returns The newly allocated and owned GPUBuffer.
    */
   uniformBuffer(data: ArrayBufferView | ArrayBuffer): GPUBuffer {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
+
     const byteLength = data.byteLength;
     const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
     const buffer = this.#device.createBuffer({ size: alignedSize, usage: UNIFORM_BUFFER_USAGE });
@@ -99,7 +109,6 @@ export class WgpuExecutionContext {
     } else {
       this.#device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, byteLength);
     }
-
     this.#ownBuffer(buffer);
     return buffer;
   }
@@ -123,9 +132,8 @@ export class WgpuExecutionContext {
    * @returns A new Tensor view.
    */
   tensor(dtype: DType, shape: readonly number[], buffer?: GPUBuffer): Tensor {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
+
     if (buffer !== undefined) {
       return new Tensor(dtype, shape, this.#device, buffer);
     }
@@ -147,9 +155,7 @@ export class WgpuExecutionContext {
    * @param dispatch The dispatch descriptor to record.
    */
   addDispatch(dispatch: WgpuDispatch): void {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
     this.#commands.push({ kind: 'dispatch', dispatch });
   }
 
@@ -163,9 +169,7 @@ export class WgpuExecutionContext {
    * @returns This context instance.
    */
   copy(src: Tensor, dst: Tensor): this {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
     if ((src.buffer.usage & GPUBufferUsage.COPY_SRC) === 0) {
       throw new Error('copy: source buffer missing COPY_SRC usage');
     }
@@ -189,11 +193,119 @@ export class WgpuExecutionContext {
    * @param args Positional arguments expected by the operator.
    * @returns This context instance.
    */
-  record<TArgs extends readonly unknown[]>(shader: Shader<TArgs>, args: TArgs): this {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+  recordShader<TArgs extends readonly unknown[]>(shader: Shader<TArgs>, args: TArgs): this {
+    this.#assertNotDestroyed();
     shader.recordIn(this, args);
+    return this;
+  }
+
+  /**
+   * Records a full serialized program — allocates buffers, uploads weights,
+   * copies inputs, dispatches the operator chain, and copies outputs.
+   *
+   * All work is deferred until {@link submit} is called.
+   *
+   * @param program The serialized program descriptor (program.json).
+   * @param weights Raw constant tensor data (weights.bin).
+   * @param args I/O tensors and scalars: `[in1, ..., out1, ...]` matching
+   * `input_ids` and `output_ids`.
+   * @returns This context instance.
+   */
+  recordProgram(
+    program: Program,
+    weights: ArrayBuffer,
+    args: readonly (Tensor | number | boolean | string)[]
+  ): this {
+    this.#assertNotDestroyed();
+
+    const numInputs = program.inputIds.length;
+    const numOutputs = program.outputIds.length;
+    if (args.length !== numInputs + numOutputs) {
+      throw new Error(`program: expected ${numInputs + numOutputs} args, got ${args.length}`);
+    }
+
+    // Allocate shared pool buffers
+    const pools = new Map<number, GPUBuffer>();
+    for (const pool of program.memoryPlan.pools) {
+      pools.set(pool.id, this.storageBuffer(pool.size));
+    }
+
+    // Allocate buffers and create Tensor views for all values
+    const tensors = new Map<number, Tensor>();
+    for (const [i, v] of program.values.entries()) {
+      if (v.type !== 'tensor') continue;
+
+      let buffer: GPUBuffer;
+      if (v.weightsOffset !== undefined && v.weightsLength !== undefined) {
+        // Constant — dedicated buffer
+        buffer = this.storageBuffer(v.weightsLength);
+      } else if (v.memObjId !== undefined) {
+        // Intermediate - shared pool buffer
+        if (!pools.has(v.memObjId)) {
+          throw new Error(`program: no memory pool ${v.memObjId} for value ${i}`);
+        }
+        buffer = pools.get(v.memObjId)!;
+      } else {
+        // Dedicated buffer - no pool assignment
+        const numel = v.shape.reduce((a, b) => a * b, 1);
+        buffer = this.storageBuffer(numel * DTYPE_BYTESIZE[v.dtype]);
+      }
+      tensors.set(i, this.tensor(v.dtype, v.shape, buffer));
+    }
+
+    // Upload weights into constant tensors
+    for (const [i, v] of program.values.entries()) {
+      if (
+        v.type === 'tensor' && // prettier-ignore
+        v.weightsOffset !== undefined &&
+        v.weightsLength !== undefined
+      ) {
+        const t = tensors.get(i);
+        const w = weights.slice(v.weightsOffset, v.weightsOffset + v.weightsLength);
+        if (t === undefined) {
+          throw new Error(`program: no tensor for constant value ${i}`);
+        }
+        t.setData(w);
+      }
+    }
+
+    // Copy inputs: user args → internal tensors
+    for (let i = 0; i < numInputs; i++) {
+      const src = args[i];
+      const dst = tensors.get(program.inputIds[i]);
+
+      if (!(src instanceof Tensor)) {
+        continue;
+      }
+      if (dst === undefined) {
+        throw new Error(`program: no tensor for input value ${program.inputIds[i]}`);
+      }
+      this.copy(src, dst);
+    }
+
+    // Dispatch operator chain
+    for (const op of program.chain) {
+      const shader = shaderRegistry[op.name] as Shader | undefined;
+      if (!shader) {
+        throw new Error(`program: unknown operator '${op.name}'`);
+      }
+      this.recordShader(shader, resolveArgs(op, program.values, tensors));
+    }
+
+    // Copy outputs: internal tensors → user args
+    for (let i = 0; i < numOutputs; i++) {
+      const src = tensors.get(program.outputIds[i]);
+      const dst = args[numInputs + i];
+
+      if (!(dst instanceof Tensor)) {
+        throw new Error(`program: output ${i} must be a Tensor`);
+      }
+      if (src === undefined) {
+        throw new Error(`program: no tensor for output value ${program.outputIds[i]}`);
+      }
+      this.copy(src, dst);
+    }
+
     return this;
   }
 
@@ -202,9 +314,7 @@ export class WgpuExecutionContext {
    * command buffer and submits to the GPU queue.
    */
   submit(): void {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
     if (this.#commands.length === 0) {
       return;
     }
@@ -233,8 +343,8 @@ export class WgpuExecutionContext {
           break;
         }
         default: {
-          const _exhaustive: never = cmd;
-          throw new Error(`Unhandled command: ${JSON.stringify(_exhaustive)}`);
+          const exhaustive: never = cmd;
+          throw new Error(`Unhandled command: ${JSON.stringify(exhaustive)}`);
         }
       }
     }
@@ -250,9 +360,7 @@ export class WgpuExecutionContext {
    * keeping owned buffers intact.
    */
   reset(): void {
-    if (this.#destroyed) {
-      throw new Error('WgpuExecutionContext is destroyed');
-    }
+    this.#assertNotDestroyed();
     this.#commands.length = 0;
   }
 }

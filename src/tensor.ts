@@ -95,13 +95,14 @@ export class Tensor {
   }
 
   /**
-   * Uploads data from a host TypedArray into this tensor's storage buffer.
+   * Uploads data from a host TypedArray or ArrayBuffer into this tensor's
+   * storage buffer.
    *
-   * @param src Source TypedArray to copy from.
+   * @param src Source data to copy from.
    * @returns This tensor instance.
-   * @throws {Error} If source byte size does not match this tensor's byte length.
+   * @throws {Error} If source byte size is smaller than this tensor's byte length.
    */
-  setData(src: TypedArray): this {
+  setData(src: TypedArray | ArrayBuffer): this {
     const byteLength = this.byteLength;
 
     if ((this.#buffer.usage & GPUBufferUsage.COPY_DST) === 0) {
@@ -111,7 +112,11 @@ export class Tensor {
       throw new Error(`setData: source (${src.byteLength}B) < required (${byteLength}B)`);
     }
 
-    this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
+    if (src instanceof ArrayBuffer) {
+      this.#device.queue.writeBuffer(this.#buffer, 0, src, 0, byteLength);
+    } else {
+      this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
+    }
     return this;
   }
 

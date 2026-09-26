@@ -320,13 +320,13 @@ def convert_vk_graph_to_program(
                 "dtype": VK_DTYPE_MAP.get(val.datatype, f"unknown_{val.datatype}"),
             }
             if val.mem_obj_id >= 0:
-                entry["mem_obj_id"] = val.mem_obj_id
+                entry["memObjId"] = val.mem_obj_id
 
             if val.constant_id >= 0:
                 const = vk_graph.constants[val.constant_id]
                 const_bytes = _extract_constant_bytes(const, raw_constant_bytes, named_data_map)
-                entry["weights_offset"] = weights_bytes_so_far
-                entry["weights_length"] = len(const_bytes)
+                entry["weightsOffset"] = weights_bytes_so_far
+                entry["weightsLength"] = len(const_bytes)
                 weights_chunks.append(const_bytes)
                 weights_bytes_so_far += len(const_bytes)
 
@@ -349,9 +349,9 @@ def convert_vk_graph_to_program(
         "version": "1",
         "chain": chain,
         "values": values,
-        "input_ids": list(vk_graph.input_ids),
-        "output_ids": list(vk_graph.output_ids),
-        "memory_plan": {"pools": pools},
+        "inputIds": list(vk_graph.input_ids),
+        "outputIds": list(vk_graph.output_ids),
+        "memoryPlan": {"pools": pools},
     }
 
     weights_bytes = b"".join(weights_chunks)
@@ -403,8 +403,8 @@ def _validate_program(program: Dict[str, Any], weights_bytes: bytes) -> None:
     values = program["values"]
     chain = program["chain"]
 
-    # 1. Weights size must match sum of all weights_length
-    total_declared = sum(v.get("weights_length", 0) for v in values if v["type"] == "tensor")
+    # 1. Weights size must match sum of all weightsLength
+    total_declared = sum(v.get("weightsLength", 0) for v in values if v["type"] == "tensor")
     if total_declared != len(weights_bytes):
         raise ValueError(
             f"Weights size mismatch: declared {total_declared} bytes, " f"actual {len(weights_bytes)} bytes"
@@ -418,8 +418,8 @@ def _validate_program(program: Dict[str, Any], weights_bytes: bytes) -> None:
                     f"chain[{ci}] '{op['name']}' references values[{arg}] " f"but only {len(values)} values exist"
                 )
 
-    # 3. input_ids and output_ids must point to tensor values
-    for label, ids in [("input_ids", program["input_ids"]), ("output_ids", program["output_ids"])]:
+    # 3. inputIds and outputIds must point to tensor values
+    for label, ids in [("inputIds", program["inputIds"]), ("outputIds", program["outputIds"])]:
         for idx in ids:
             if idx < 0 or idx >= len(values):
                 raise ValueError(f"{label} references values[{idx}] out of range")
@@ -428,24 +428,24 @@ def _validate_program(program: Dict[str, Any], weights_bytes: bytes) -> None:
                     f"{label} references values[{idx}] of type " f"'{values[idx]['type']}', expected 'tensor'"
                 )
 
-    # 4. All mem_obj_ids must appear in memory_plan.pools
-    pool_ids = {p["id"] for p in program["memory_plan"]["pools"]}
+    # 4. All memObjIds must appear in memoryPlan.pools
+    pool_ids = {p["id"] for p in program["memoryPlan"]["pools"]}
     for i, v in enumerate(values):
-        if v["type"] == "tensor" and "mem_obj_id" in v:
-            if v["mem_obj_id"] not in pool_ids:
+        if v["type"] == "tensor" and "memObjId" in v:
+            if v["memObjId"] not in pool_ids:
                 raise ValueError(
-                    f"values[{i}] has mem_obj_id={v['mem_obj_id']} "
-                    f"but no matching pool in memory_plan. "
+                    f"values[{i}] has memObjId={v['memObjId']} "
+                    f"but no matching pool in memoryPlan. "
                     f"Available pools: {sorted(pool_ids)}"
                 )
 
     # 5. Weights offsets must be within bounds
     for i, v in enumerate(values):
-        if v["type"] == "tensor" and "weights_offset" in v:
-            end = v["weights_offset"] + v["weights_length"]
+        if v["type"] == "tensor" and "weightsOffset" in v:
+            end = v["weightsOffset"] + v["weightsLength"]
             if end > len(weights_bytes):
                 raise ValueError(
-                    f"values[{i}] weights [{v['weights_offset']}:{end}] "
+                    f"values[{i}] weights [{v['weightsOffset']}:{end}] "
                     f"exceeds weights.bin size ({len(weights_bytes)})"
                 )
 

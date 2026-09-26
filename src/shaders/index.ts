@@ -8,3 +8,12 @@ export const shaders = {
   add,
   mm,
 } as const;
+
+/**
+ * Maps ExecuTorch operator names to their shader implementations.
+ *
+ * @internal
+ */
+export const shaderRegistry = Object.fromEntries(
+  Object.values(shaders).map((shader) => [shader.name, shader])
+);

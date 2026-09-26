@@ -127,7 +127,7 @@ runBtn.addEventListener('click', async () => {
     const out = ctx.tensor('float32', [2, 3]);
 
     // Record with direct typed arguments: [in1, in2, alpha, out]
-    ctx.record(shaders.add, [in1, in2, 2.0, out]);
+    ctx.recordShader(shaders.add, [in1, in2, 2.0, out]);
     log('   Context recorded 1 compute dispatch.');
 
     log('9. Executing context dispatches on WebGPU...');
@@ -194,7 +194,7 @@ runBtn.addEventListener('click', async () => {
     const mmB = mmCtx.tensor('float32', [3, 2]).setData(bData);
     const mmOut = mmCtx.tensor('float32', [2, 2]);
 
-    mmCtx.record(shaders.mm, [mmA, mmB, mmOut]);
+    mmCtx.recordShader(shaders.mm, [mmA, mmB, mmOut]);
     log('   Context recorded 1 tiled GEMM dispatch.');
 
     log('12. Executing matrix multiplication on WebGPU...');
@@ -238,7 +238,7 @@ runBtn.addEventListener('click', async () => {
     const vecB = vecCtx.tensor('float32', [4, 4]).setData(bData4x4);
     const vecOut = vecCtx.tensor('float32', [4, 4]);
 
-    vecCtx.record(shaders.mm, [vecA, vecB, vecOut]);
+    vecCtx.recordShader(shaders.mm, [vecA, vecB, vecOut]);
     log('   Context recorded 1 vectorized vec4 GEMM dispatch.');
 
     log('15. Executing vectorized matrix multiplication on WebGPU...');
@@ -271,6 +271,7 @@ runBtn.addEventListener('click', async () => {
     log(`17. Initializing deterministic 2048x2048 matrices (16.7MB each in VRAM)...`);
 
     const metaRes = await fetch('/bench/meta_2048.json');
+    /* eslint-disable @typescript-eslint/naming-convention */
     const meta = (await metaRes.json()) as {
       dim: number;
       gpu_name: string;
@@ -283,6 +284,7 @@ runBtn.addEventListener('click', async () => {
       sample_1000_1000: number;
       sample_last: number;
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     log(`   Target GPU: ${meta.gpu_name}`);
     log(
@@ -309,7 +311,7 @@ runBtn.addEventListener('click', async () => {
     const benchB = benchCtx.tensor('float32', [benchDim, benchDim]).setData(bFloats);
     const benchOut = benchCtx.tensor('float32', [benchDim, benchDim]);
 
-    benchCtx.record(shaders.mm, [benchA, benchB, benchOut]);
+    benchCtx.recordShader(shaders.mm, [benchA, benchB, benchOut]);
     log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
 
     // Warm-up run & accuracy verification
@@ -371,6 +373,7 @@ runBtn.addEventListener('click', async () => {
     log(`21. Initializing 2047x2047 matrices (forces non-vec4 scalar 32x32 tiled shader)...`);
 
     const metaOddRes = await fetch('/bench/meta_odd.json');
+    /* eslint-disable @typescript-eslint/naming-convention */
     const metaOdd = (await metaOddRes.json()) as {
       M: number;
       K: number;
@@ -384,6 +387,7 @@ runBtn.addEventListener('click', async () => {
       sample_1000_1000: number;
       sample_last: number;
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     log(`   Target GPU: ${metaOdd.gpu_name}`);
     log(
@@ -413,7 +417,7 @@ runBtn.addEventListener('click', async () => {
     const oddB = oddCtx.tensor('float32', [oddK, oddN]).setData(bOddFloats);
     const oddOut = oddCtx.tensor('float32', [oddM, oddN]);
 
-    oddCtx.record(shaders.mm, [oddA, oddB, oddOut]);
+    oddCtx.recordShader(shaders.mm, [oddA, oddB, oddOut]);
     log('   Context recorded 2047x2047 scalar tiled GEMM dispatch (K%4!=0, N%4!=0).');
 
     // Warm-up & accuracy check

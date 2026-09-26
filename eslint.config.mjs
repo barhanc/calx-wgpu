@@ -34,6 +34,29 @@ export default [
         },
       ],
       'camelcase': 'error',
+      '@typescript-eslint/naming-convention': [
+        'error',
+        {
+          selector: 'default',
+          format: ['camelCase'],
+        },
+        {
+          selector: 'variable',
+          format: ['camelCase', 'UPPER_CASE'],
+        },
+        {
+          selector: 'typeProperty',
+          format: ['camelCase'],
+        },
+        {
+          selector: 'enumMember',
+          format: ['PascalCase', 'UPPER_CASE'],
+        },
+        {
+          selector: 'typeLike',
+          format: ['PascalCase'],
+        },
+      ],
       'no-console': 'warn',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param': ['error', { checkDestructured: false }],
