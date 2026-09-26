@@ -159,22 +159,43 @@ VK_DTYPE_BYTES: Dict[VkDataType, int] = {
 
 def extract_vk_graph(
     pte_bytes: bytes,
+    method: Optional[str] = None,
 ) -> Tuple[VkGraph, bytes, Optional[Dict[str, bytes]]]:
     """
     Parse a .pte file and extract the VkGraph delegate + constant data.
+
+    Args:
+        pte_bytes: Raw .pte file bytes.
+        method: Method name to extract (e.g. "forward"). If None and the
+            .pte contains exactly one method, uses it. If None and multiple
+            methods exist, uses the first one with a warning.
 
     Returns:
         (vk_graph, raw_constant_bytes, named_data_map)
 
     Raises:
-        RuntimeError: If no Vulkan/WebGPU delegate is found.
+        RuntimeError: If no Vulkan/WebGPU delegate is found, or the
+            requested method doesn't exist.
         ValueError:   If the delegate blob header is invalid.
     """
     pte = deserialize_pte_binary(pte_bytes)
     program = pte.program
 
-    # Find the Vulkan/WebGPU delegate
-    ep = program.execution_plan[0]
+    # Select the execution plan (method)
+    plans = program.execution_plan
+    names = [ep.name for ep in plans]
+
+    if method is not None:
+        matches = [ep for ep in plans if ep.name == method]
+        if not matches:
+            raise RuntimeError(f"Method '{method}' not found. Available methods: {names}")
+        ep = matches[0]
+    elif len(plans) == 1:
+        ep = plans[0]
+    else:
+        print(f"  WARNING: multiple methods found: {names}", file=sys.stderr)
+        print(f"  Using first method '{names[0]}'. Use --method to select.", file=sys.stderr)
+        ep = plans[0]
     delegate = None
     for d in ep.delegates:
         if "vulkan" in d.id.lower() or "webgpu" in d.id.lower():
@@ -520,6 +541,11 @@ def main() -> None:
         help="export a demo model to .pte first, then convert it",
     )
     parser.add_argument(
+        "--method",
+        default=None,
+        help="method name to extract (default: first/only method)",
+    )
+    parser.add_argument(
         "--print-json",
         action="store_true",
         help="print program.json to stdout after conversion",
@@ -546,7 +572,7 @@ def main() -> None:
     # Step 1: Parse .pte
     print(f"\nParsing {pte_path}...")
     pte_bytes = pte_path.read_bytes()
-    vk_graph, raw_constant_bytes, named_data_map = extract_vk_graph(pte_bytes)
+    vk_graph, raw_constant_bytes, named_data_map = extract_vk_graph(pte_bytes, method=args.method)
 
     print(f"  Operators:  {len(vk_graph.chain)}")
     print(f"  Values:     {len(vk_graph.values)}")

@@ -1,4 +1,4 @@
-import { initDevice, isWebGPUSupported, shaders, Tensor, WgpuExecutionContext } from '../src';
+import { shaders, Tensor, WgpuExecutionContext } from '../src';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const runBtn = document.getElementById('run-btn') as HTMLButtonElement;
@@ -8,7 +8,10 @@ function log(msg: string) {
   logEl.textContent += `${msg}\n`;
 }
 
-if (!isWebGPUSupported()) {
+const webgpuSupported =
+  typeof navigator !== 'undefined' && 'gpu' in navigator && Boolean(navigator.gpu);
+
+if (!webgpuSupported) {
   statusEl.innerHTML =
     '<span class="tag tag-warn">Unsupported</span> WebGPU is not supported in this browser.';
 } else {
@@ -22,7 +25,13 @@ runBtn.addEventListener('click', async () => {
 
   try {
     log('1. Initializing WebGPU device...');
-    const device = await initDevice();
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) throw new Error('No suitable GPU adapter found');
+    const device = await adapter.requestDevice({
+      requiredFeatures: ['shader-f16', 'subgroups'].filter((f) =>
+        adapter.features.has(f as GPUFeatureName)
+      ) as GPUFeatureName[],
+    });
     log(`   Device acquired!`);
     log(`   - shader-f16 supported: ${device.features.has('shader-f16')}`);
     log(`   - subgroups supported:  ${device.features.has('subgroups')}`);

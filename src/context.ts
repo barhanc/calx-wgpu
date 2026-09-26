@@ -1,7 +1,8 @@
 import type { Shader } from './shader';
-import type { WgpuDispatch, WgpuCommand } from './command';
-import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
 import type { Program } from './program';
+import type { WgpuDispatch, WgpuCommand } from './command';
+
+import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
 import { resolveArgs } from './program';
 import { shaderRegistry } from './shaders';
 
