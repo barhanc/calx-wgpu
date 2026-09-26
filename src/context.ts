@@ -1,5 +1,5 @@
 import type { Shader } from './shader';
-import type { WgpuDispatch } from './dispatch';
+import type { WgpuDispatch, WgpuCommand } from './command';
 import { Tensor, DTYPE_BYTESIZE, type DType } from './tensor';
 
 const UNIFORM_BUFFER_USAGE = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
@@ -12,7 +12,7 @@ const STORAGE_BUFFER_USAGE =
  */
 export class WgpuExecutionContext {
   readonly #device: GPUDevice;
-  readonly #dispatches: WgpuDispatch[] = [];
+  readonly #commands: WgpuCommand[] = [];
   readonly #ownedBuffers = new Set<GPUBuffer>();
   #destroyed = false;
 
@@ -54,7 +54,7 @@ export class WgpuExecutionContext {
       buffer.destroy();
     }
     this.#ownedBuffers.clear();
-    this.#dispatches.length = 0;
+    this.#commands.length = 0;
   }
 
   // =========================================================================
@@ -150,7 +150,36 @@ export class WgpuExecutionContext {
     if (this.#destroyed) {
       throw new Error('WgpuExecutionContext is destroyed');
     }
-    this.#dispatches.push(dispatch);
+    this.#commands.push({ kind: 'dispatch', dispatch });
+  }
+
+  /**
+   * Records a deferred GPU buffer-to-buffer copy into the context execution
+   * queue. The copy is encoded and submitted when {@link submit} is called,
+   * preserving ordering relative to recorded dispatches.
+   *
+   * @param src Source tensor to copy from.
+   * @param dst Destination tensor to copy to.
+   * @returns This context instance.
+   */
+  copy(src: Tensor, dst: Tensor): this {
+    if (this.#destroyed) {
+      throw new Error('WgpuExecutionContext is destroyed');
+    }
+    if ((src.buffer.usage & GPUBufferUsage.COPY_SRC) === 0) {
+      throw new Error('copy: source buffer missing COPY_SRC usage');
+    }
+    if ((dst.buffer.usage & GPUBufferUsage.COPY_DST) === 0) {
+      throw new Error('copy: destination buffer missing COPY_DST usage');
+    }
+    if (dst.byteLength < src.byteLength) {
+      throw new Error(`copy: destination (${dst.byteLength}B) < source (${src.byteLength}B)`);
+    }
+    this.#commands.push({
+      kind: 'copy',
+      copy: { src: src.buffer, dst: dst.buffer, size: src.byteLength },
+    });
+    return this;
   }
 
   /**
@@ -169,42 +198,61 @@ export class WgpuExecutionContext {
   }
 
   /**
-   * Encodes all recorded dispatches into a single command buffer and submits to
-   * the GPU queue.
+   * Encodes all recorded commands (dispatches and copies) into a single
+   * command buffer and submits to the GPU queue.
    */
   submit(): void {
     if (this.#destroyed) {
       throw new Error('WgpuExecutionContext is destroyed');
     }
-    if (this.#dispatches.length === 0) {
+    if (this.#commands.length === 0) {
       return;
     }
 
     const encoder = this.#device.createCommandEncoder();
-    const pass = encoder.beginComputePass();
+    let pass: GPUComputePassEncoder | undefined;
 
-    for (const dispatch of this.#dispatches) {
-      pass.setPipeline(dispatch.pipeline);
-      pass.setBindGroup(0, dispatch.bindGroup);
-      pass.dispatchWorkgroups(
-        dispatch.workgroupCountX,
-        dispatch.workgroupCountY,
-        dispatch.workgroupCountZ ?? 1
-      );
+    for (const cmd of this.#commands) {
+      switch (cmd.kind) {
+        case 'copy': {
+          if (pass) {
+            pass.end();
+            pass = undefined;
+          }
+          encoder.copyBufferToBuffer(cmd.copy.src, 0, cmd.copy.dst, 0, cmd.copy.size);
+          break;
+        }
+        case 'dispatch': {
+          if (!pass) {
+            pass = encoder.beginComputePass();
+          }
+          const d = cmd.dispatch;
+          pass.setPipeline(d.pipeline);
+          pass.setBindGroup(0, d.bindGroup);
+          pass.dispatchWorkgroups(d.workgroupCountX, d.workgroupCountY, d.workgroupCountZ ?? 1);
+          break;
+        }
+        default: {
+          const _exhaustive: never = cmd;
+          throw new Error(`Unhandled command: ${JSON.stringify(_exhaustive)}`);
+        }
+      }
     }
 
-    pass.end();
+    if (pass) {
+      pass.end();
+    }
     this.#device.queue.submit([encoder.finish()]);
   }
 
   /**
-   * Clears all recorded dispatches to prepare for a fresh recording pass while
+   * Clears all recorded commands to prepare for a fresh recording pass while
    * keeping owned buffers intact.
    */
   reset(): void {
     if (this.#destroyed) {
       throw new Error('WgpuExecutionContext is destroyed');
     }
-    this.#dispatches.length = 0;
+    this.#commands.length = 0;
   }
 }

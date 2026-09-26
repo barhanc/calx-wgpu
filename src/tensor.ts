@@ -31,8 +31,8 @@ const STAGING_BUFFER_USAGE = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
  * Encapsulates an interpretation of an allocated `GPUBuffer` in device VRAM
  * along with its metadata (`dtype`, `shape`, `numel`, `byteLength`). Use
  * {@link Tensor.getData} to read raw bytes back into host memory and
- * {@link Tensor.setData} to copy data into it. The underlying `GPUBuffer`
- * lifetime is managed externally.
+ * {@link Tensor.setData} to upload host data into it. The underlying
+ * `GPUBuffer` lifetime is managed externally.
  */
 export class Tensor {
   readonly #dtype: DType;
@@ -95,32 +95,20 @@ export class Tensor {
   }
 
   /**
-   * Copies data from a host TypedArray or another GPUBuffer into this tensor's
-   * storage buffer.
+   * Uploads data from a host TypedArray into this tensor's storage buffer.
    *
-   * @param src Source TypedArray or GPUBuffer to copy from.
+   * @param src Source TypedArray to copy from.
    * @returns This tensor instance.
    * @throws {Error} If source byte size does not match this tensor's byte length.
    */
-  setData(src: GPUBuffer | TypedArray): this {
+  setData(src: TypedArray): this {
     const byteLength = this.byteLength;
 
-    if (src instanceof GPUBuffer) {
-      if (src.size < byteLength) {
-        throw new Error(`GPUBuffer size (${src.size}B) < required (${byteLength}B)`);
-      }
-      if ((src.usage & GPUBufferUsage.COPY_SRC) === 0) {
-        throw new Error('GPUBuffer must have GPUBufferUsage.COPY_SRC flag');
-      }
-
-      const encoder = this.#device.createCommandEncoder();
-      encoder.copyBufferToBuffer(src, 0, this.#buffer, 0, byteLength);
-      this.#device.queue.submit([encoder.finish()]);
-      return this;
+    if ((this.#buffer.usage & GPUBufferUsage.COPY_DST) === 0) {
+      throw new Error('setData: buffer missing COPY_DST usage');
     }
-
     if (src.byteLength < byteLength) {
-      throw new Error(`Source bytes (${src.byteLength}B) < required (${byteLength}B)`);
+      throw new Error(`setData: source (${src.byteLength}B) < required (${byteLength}B)`);
     }
 
     this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);

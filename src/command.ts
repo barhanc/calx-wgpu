@@ -38,6 +38,25 @@ export type WgpuDispatch = {
   readonly workgroupCountZ?: number;
 };
 
+/**
+ * A recorded GPU buffer-to-buffer copy command.
+ */
+export type WgpuCopy = {
+  /** Source buffer to copy from. */
+  readonly src: GPUBuffer;
+  /** Destination buffer to copy to. */
+  readonly dst: GPUBuffer;
+  /** Number of bytes to copy. */
+  readonly size: number;
+};
+
+/**
+ * A recorded GPU command — either a compute dispatch or a buffer copy.
+ */
+export type WgpuCommand =
+  | { readonly kind: 'dispatch'; readonly dispatch: WgpuDispatch }
+  | { readonly kind: 'copy'; readonly copy: WgpuCopy };
+
 const pipelineCache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
 
 /**

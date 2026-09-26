@@ -1,7 +1,7 @@
 import type { Shader } from '../shader';
 import type { Tensor } from '../tensor';
 import type { WgpuExecutionContext } from '../context';
-import { createComputeBundle } from '../dispatch';
+import { createComputeBundle } from '../command';
 
 const name = 'aten.mm.default';
 

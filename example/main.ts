@@ -87,24 +87,28 @@ runBtn.addEventListener('click', async () => {
       log('   ❌ Test B FAILED: Readback does not match input!');
     }
 
-    log('7. Testing GPUBuffer-to-GPUBuffer setData...');
+    log('7. Testing GPU-to-GPU copy via ctx.copy()...');
     const srcGpuBuffer = device.createBuffer({
       size: 16,
-      usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
     const updatedDataB = new Int32Array([100, 200, 300, 400]);
     device.queue.writeBuffer(srcGpuBuffer, 0, updatedDataB.buffer, updatedDataB.byteOffset, 16);
-    // Copy tensorB.byteLength bytes from srcGpuBuffer into tensorB
-    tensorB.setData(srcGpuBuffer);
+    const srcTensor = new Tensor('int32', shapeB, device, srcGpuBuffer);
+    const copyCtx = new WgpuExecutionContext(device);
+    copyCtx.copy(srcTensor, tensorB);
+    copyCtx.submit();
+    await device.queue.onSubmittedWorkDone();
     const updatedArrayBufferB = await tensorB.getData();
     const updatedResultB = new Int32Array(updatedArrayBufferB);
     const matchesB2 = updatedDataB.every((val, idx) => val === updatedResultB[idx]);
     if (matchesB2) {
-      log('   ✅ Test B2 PASSED: GPUBuffer-to-GPUBuffer setData verified!');
+      log('   ✅ Test B2 PASSED: GPU-to-GPU ctx.copy verified!');
     } else {
-      log('   ❌ Test B2 FAILED: GPUBuffer copy mismatch!');
+      log('   ❌ Test B2 FAILED: GPU-to-GPU copy mismatch!');
     }
     srcGpuBuffer.destroy();
+    copyCtx.destroy();
 
     externalBuffer.destroy();
     log('   External buffer destroyed.');

@@ -10,3 +10,4 @@ third-party/
 .vscode/
 *.pte
 .venv/
+scripts/build/
