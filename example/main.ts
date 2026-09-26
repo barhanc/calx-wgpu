@@ -23,6 +23,9 @@ runBtn.addEventListener('click', async () => {
   runBtn.disabled = true;
   logEl.textContent = '';
 
+  // Set to true to skip Test F (2048x2048) and run only Test G (2047x2047)
+  const SKIP_BENCH_F = false;
+
   try {
     log('1. Initializing WebGPU device...');
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -275,105 +278,107 @@ runBtn.addEventListener('click', async () => {
 
     vecCtx.destroy();
 
-    log('\n--- Test F: High-Performance GEMM Benchmark (2048x2048) vs NumPy ---');
-    const benchDim = 2048;
-    log(`17. Initializing deterministic 2048x2048 matrices (16.7MB each in VRAM)...`);
+    if (!SKIP_BENCH_F) {
+      log('\n--- Test F: High-Performance GEMM Benchmark (2048x2048) vs NumPy ---');
+      const benchDim = 2048;
+      log(`17. Initializing deterministic 2048x2048 matrices (16.7MB each in VRAM)...`);
 
-    const metaRes = await fetch('/bench/meta_2048.json');
-    /* eslint-disable @typescript-eslint/naming-convention */
-    const meta = (await metaRes.json()) as {
-      dim: number;
-      gpu_name: string;
-      numpy_avg_ms: number;
-      cuda_avg_ms: number;
-      cuda_tflops: number;
-      checksum: number;
-      sample_0_0: number;
-      sample_0_100: number;
-      sample_1000_1000: number;
-      sample_last: number;
-    };
-    /* eslint-enable @typescript-eslint/naming-convention */
+      const metaRes = await fetch('/bench/meta_2048.json');
+      /* eslint-disable @typescript-eslint/naming-convention */
+      const meta = (await metaRes.json()) as {
+        dim: number;
+        gpu_name: string;
+        numpy_avg_ms: number;
+        cuda_avg_ms: number;
+        cuda_tflops: number;
+        checksum: number;
+        sample_0_0: number;
+        sample_0_100: number;
+        sample_1000_1000: number;
+        sample_last: number;
+      };
+      /* eslint-enable @typescript-eslint/naming-convention */
 
-    log(`   Target GPU: ${meta.gpu_name}`);
-    log(
-      `   PyTorch CUDA (cuBLAS) reference: ${meta.cuda_avg_ms.toFixed(2)} ms (${meta.cuda_tflops.toFixed(2)} TFLOPS)`
-    );
-    log(`   NumPy CPU (OpenBLAS) reference:  ${meta.numpy_avg_ms.toFixed(2)} ms`);
-
-    const totalElements = benchDim * benchDim;
-    const aFloats = new Float32Array(totalElements);
-    const bFloats = new Float32Array(totalElements);
-
-    // Identical deterministic generation to Python NumPy script
-    for (let i = 0; i < benchDim; i++) {
-      const rowOffset = i * benchDim;
-      for (let j = 0; j < benchDim; j++) {
-        aFloats[rowOffset + j] = ((i * 31.0 + j * 17.0 + 1.0) % 100.0) / 100.0 - 0.5;
-        bFloats[rowOffset + j] = ((i * 13.0 + j * 43.0 + 7.0) % 100.0) / 100.0 - 0.5;
-      }
-    }
-
-    log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
-    const benchCtx = new WgpuExecutionContext(device);
-    const benchA = benchCtx.tensor('float32', [benchDim, benchDim]).setData(aFloats);
-    const benchB = benchCtx.tensor('float32', [benchDim, benchDim]).setData(bFloats);
-    const benchOut = benchCtx.tensor('float32', [benchDim, benchDim]);
-
-    benchCtx.recordShader(shaders.mm, [benchA, benchB, benchOut]);
-    log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
-
-    // Warm-up run & accuracy verification
-    log('19. Executing on WebGPU and verifying accuracy against NumPy...');
-    benchCtx.submit();
-    await device.queue.onSubmittedWorkDone();
-
-    const actualOutBytes = await benchOut.getData();
-    const actualFloats = new Float32Array(actualOutBytes);
-
-    // Verify sample coordinates against NumPy reference
-    const check00 = Math.abs(actualFloats[0] - meta.sample_0_0);
-    const check0100 = Math.abs(actualFloats[100] - meta.sample_0_100);
-    const check1000 = Math.abs(actualFloats[1000 * benchDim + 1000] - meta.sample_1000_1000);
-    const checkLast = Math.abs(actualFloats[totalElements - 1] - meta.sample_last);
-    const maxSampleDiff = Math.max(check00, check0100, check1000, checkLast);
-
-    if (maxSampleDiff < 1e-3) {
+      log(`   Target GPU: ${meta.gpu_name}`);
       log(
-        `   ✅ Numerical accuracy verified! Max sample diff from NumPy: ${maxSampleDiff.toExponential(3)}`
+        `   PyTorch CUDA (cuBLAS) reference: ${meta.cuda_avg_ms.toFixed(2)} ms (${meta.cuda_tflops.toFixed(2)} TFLOPS)`
       );
-    } else {
-      log(`   ❌ Numerical check failed! Diff: ${maxSampleDiff}`);
-    }
+      log(`   NumPy CPU (OpenBLAS) reference:  ${meta.numpy_avg_ms.toFixed(2)} ms`);
 
-    // Benchmark iterations
-    const iterations = 10;
-    log(`20. Running ${iterations} benchmark iterations on WebGPU...`);
-    const tBenchStart = performance.now();
-    for (let it = 0; it < iterations; it++) {
+      const totalElements = benchDim * benchDim;
+      const aFloats = new Float32Array(totalElements);
+      const bFloats = new Float32Array(totalElements);
+
+      // Identical deterministic generation to Python NumPy script
+      for (let i = 0; i < benchDim; i++) {
+        const rowOffset = i * benchDim;
+        for (let j = 0; j < benchDim; j++) {
+          aFloats[rowOffset + j] = ((i * 31.0 + j * 17.0 + 1.0) % 100.0) / 100.0 - 0.5;
+          bFloats[rowOffset + j] = ((i * 13.0 + j * 43.0 + 7.0) % 100.0) / 100.0 - 0.5;
+        }
+      }
+
+      log(`18. Uploading 2048x2048 test matrices to WebGPU VRAM...`);
+      const benchCtx = new WgpuExecutionContext(device);
+      const benchA = benchCtx.tensor('float32', [benchDim, benchDim]).setData(aFloats);
+      const benchB = benchCtx.tensor('float32', [benchDim, benchDim]).setData(bFloats);
+      const benchOut = benchCtx.tensor('float32', [benchDim, benchDim]);
+
+      benchCtx.recordShader(shaders.mm, [benchA, benchB, benchOut]);
+      log('   Context recorded 2048x2048 tiled vec4 GEMM dispatch.');
+
+      // Warm-up run & accuracy verification
+      log('19. Executing on WebGPU and verifying accuracy against NumPy...');
       benchCtx.submit();
+      await device.queue.onSubmittedWorkDone();
+
+      const actualOutBytes = await benchOut.getData();
+      const actualFloats = new Float32Array(actualOutBytes);
+
+      // Verify sample coordinates against NumPy reference
+      const check00 = Math.abs(actualFloats[0] - meta.sample_0_0);
+      const check0100 = Math.abs(actualFloats[100] - meta.sample_0_100);
+      const check1000 = Math.abs(actualFloats[1000 * benchDim + 1000] - meta.sample_1000_1000);
+      const checkLast = Math.abs(actualFloats[totalElements - 1] - meta.sample_last);
+      const maxSampleDiff = Math.max(check00, check0100, check1000, checkLast);
+
+      if (maxSampleDiff < 1e-3) {
+        log(
+          `   ✅ Numerical accuracy verified! Max sample diff from NumPy: ${maxSampleDiff.toExponential(3)}`
+        );
+      } else {
+        log(`   ❌ Numerical check failed! Diff: ${maxSampleDiff}`);
+      }
+
+      // Benchmark iterations
+      const iterations = 10;
+      log(`20. Running ${iterations} benchmark iterations on WebGPU...`);
+      const tBenchStart = performance.now();
+      for (let it = 0; it < iterations; it++) {
+        benchCtx.submit();
+      }
+      await device.queue.onSubmittedWorkDone();
+      const totalBenchTimeMs = performance.now() - tBenchStart;
+      const avgWebGpuMs = totalBenchTimeMs / iterations;
+
+      // 2 * M * N * K floating point operations
+      const totalFlops = 2.0 * benchDim * benchDim * benchDim;
+      const gigaFlops = totalFlops / 1e9;
+      const throughputGflops = gigaFlops / (avgWebGpuMs / 1000);
+      const throughputTflops = throughputGflops / 1000;
+
+      log(`\n📊 Benchmark Results Summary (2048x2048 Matmul, 17.18 GFLOPs per run):`);
+      log(
+        `   - PyTorch CUDA (cuBLAS): ${meta.cuda_avg_ms.toFixed(2)} ms (${meta.cuda_tflops.toFixed(2)} TFLOPS)`
+      );
+      log(
+        `   - Phlox (WebGPU):        ${avgWebGpuMs.toFixed(2)} ms (${throughputGflops.toFixed(1)} GFLOPS / ${throughputTflops.toFixed(2)} TFLOPS)`
+      );
+      log(`   - NumPy (CPU BLAS):      ${meta.numpy_avg_ms.toFixed(2)} ms`);
+      log('   ✅ Test F PASSED: 2048x2048 GEMM benchmark completed!');
+
+      benchCtx.destroy();
     }
-    await device.queue.onSubmittedWorkDone();
-    const totalBenchTimeMs = performance.now() - tBenchStart;
-    const avgWebGpuMs = totalBenchTimeMs / iterations;
-
-    // 2 * M * N * K floating point operations
-    const totalFlops = 2.0 * benchDim * benchDim * benchDim;
-    const gigaFlops = totalFlops / 1e9;
-    const throughputGflops = gigaFlops / (avgWebGpuMs / 1000);
-    const throughputTflops = throughputGflops / 1000;
-
-    log(`\n📊 Benchmark Results Summary (2048x2048 Matmul, 17.18 GFLOPs per run):`);
-    log(
-      `   - PyTorch CUDA (cuBLAS): ${meta.cuda_avg_ms.toFixed(2)} ms (${meta.cuda_tflops.toFixed(2)} TFLOPS)`
-    );
-    log(
-      `   - Phlox (WebGPU):        ${avgWebGpuMs.toFixed(2)} ms (${throughputGflops.toFixed(1)} GFLOPS / ${throughputTflops.toFixed(2)} TFLOPS)`
-    );
-    log(`   - NumPy (CPU BLAS):      ${meta.numpy_avg_ms.toFixed(2)} ms`);
-    log('   ✅ Test F PASSED: 2048x2048 GEMM benchmark completed!');
-
-    benchCtx.destroy();
 
     log('\n--- Test G: Scalar Tiled GEMM Benchmark (2047x2047, non-divisible by 4) ---');
     const oddM = 2047;

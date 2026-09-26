@@ -57,7 +57,7 @@ export type WgpuCommand =
   | { readonly kind: 'dispatch'; readonly dispatch: WgpuDispatch }
   | { readonly kind: 'copy'; readonly copy: WgpuCopy };
 
-const pipelineCache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
+const cache = new WeakMap<GPUDevice, Map<string, GPUComputePipeline>>();
 
 /**
  * Serializes pipeline override constants into a deterministic,
@@ -96,10 +96,10 @@ export function createComputeBundle(
   constants: Record<string, number> = {},
   entryPoint: string = 'main'
 ): ComputePipelineBundle {
-  let deviceMap = pipelineCache.get(device);
+  let deviceMap = cache.get(device);
   if (!deviceMap) {
     deviceMap = new Map();
-    pipelineCache.set(device, deviceMap);
+    cache.set(device, deviceMap);
   }
 
   const serializedConsts = serializeConstants(constants);
