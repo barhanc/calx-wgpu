@@ -5,9 +5,10 @@ import { create, globals } from 'webgpu';
 Object.assign(globalThis, globals);
 
 // Create a global navigator with WebGPU for Node.js.
+// Use SwiftShader for headless environments (CI) where no GPU is available.
 // navigator is read-only on globalThis in Node.js, so use defineProperty.
 Object.defineProperty(globalThis, 'navigator', {
-  value: { gpu: create([]) },
+  value: { gpu: create(['--enable-unsafe-swiftshader=true']) },
   writable: true,
   configurable: true,
 });
