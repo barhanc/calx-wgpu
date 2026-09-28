@@ -22,4 +22,7 @@ jobs:
 
       - run: npm run lint
 
+      - name: Install software Vulkan drivers
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+
       - run: npm run test
