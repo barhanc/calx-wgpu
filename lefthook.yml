@@ -7,3 +7,5 @@ pre-commit:
       stage_fixed: true
     typecheck:
       run: npm run typecheck
+    test:
+      run: npm run test

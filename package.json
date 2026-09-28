@@ -26,6 +26,7 @@
   "license": "MIT",
   "type": "module",
   "devDependencies": {
+    "@types/node": "^26.6.3",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
     "@webgpu/types": "^0.1.72",
@@ -38,7 +39,8 @@
     "tsup": "^8.5.1",
     "typescript": "^5.8.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "webgpu": "^0.6.1"
   },
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -237,6 +237,7 @@ export class WgpuExecutionContext {
       if (v.type !== 'tensor') continue;
 
       let buffer: GPUBuffer;
+
       if (v.weightsOffset !== undefined && v.weightsLength !== undefined) {
         // Constant — dedicated buffer
         buffer = this.storageBuffer(v.weightsLength);
@@ -251,6 +252,7 @@ export class WgpuExecutionContext {
         const numel = v.shape.reduce((a, b) => a * b, 1);
         buffer = this.storageBuffer(numel * DTYPE_BYTESIZE[v.dtype]);
       }
+
       tensors.set(i, this.tensor(v.dtype, v.shape, buffer));
     }
 
@@ -333,6 +335,7 @@ export class WgpuExecutionContext {
           encoder.copyBufferToBuffer(cmd.copy.src, 0, cmd.copy.dst, 0, cmd.copy.size);
           break;
         }
+
         case 'dispatch': {
           if (!pass) {
             pass = encoder.beginComputePass();
@@ -343,6 +346,7 @@ export class WgpuExecutionContext {
           pass.dispatchWorkgroups(d.workgroupCountX, d.workgroupCountY, d.workgroupCountZ ?? 1);
           break;
         }
+
         default: {
           const exhaustive: never = cmd;
           throw new Error(`Unhandled command: ${JSON.stringify(exhaustive)}`);
@@ -354,6 +358,16 @@ export class WgpuExecutionContext {
       pass.end();
     }
     this.#device.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * Waits for all previously submitted GPU work to complete.
+   *
+   * @returns A promise that resolves when the GPU queue is idle.
+   */
+  async sync(): Promise<void> {
+    this.#assertNotDestroyed();
+    await this.#device.queue.onSubmittedWorkDone();
   }
 
   /**

@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["@webgpu/types"],
+    "types": ["@webgpu/types", "node"],
     "declaration": true,
     "strict": true,
     "skipLibCheck": true
