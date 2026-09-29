@@ -17,6 +17,15 @@ buffers and are executed as recorded command sequences.
 > purposes. I no longer actively work on this (maybe I will come back) to pursue
 > other interests.
 
+## Philosophy
+
+Calx is built around a few core architectural principles:
+
+- **Radical Minimality**: There is no heavy framework, runtime virtual machine, or complex graph compiler. Tensors map directly to `GPUBuffer` views, and commands record directly into WebGPU passes. The entire runtime layer is thin, predictable, and transparent.
+- **Self-Contained Shader Encapsulation**: Every operator lives in its own dedicated file under `src/shaders/`. All logic needed by an operator—hand-written WGSL kernel source, shape and dtype validation, uniform layout packing, and dispatch geometry—is cleanly collocated in one place.
+- **Effortless Extensibility**: The core runtime is completely decoupled from operator semantics. Adding a new operator requires zero changes to the engine: implement the `Shader` interface in a new file, export it in `src/shaders/index.ts`, and it is automatically registered for both standalone execution and ExecuTorch program graphs.
+- **Static Memory Efficiency**: Intermediate activations leverage ExecuTorch's ahead-of-time memory planner. Multiple tensors with non-overlapping lifetimes share pre-allocated GPU storage pools, eliminating runtime allocation overhead and keeping memory consumption deterministic.
+
 ## Quick start
 
 ```bash
@@ -135,12 +144,3 @@ const durMs = performance.now() - t0;
 const outBytes = await out.getData();
 const outArray = new Float32Array(outBytes); // [112, 160, 240, 352]
 ```
-
-## Philosophy
-
-Calx is built around a few core architectural principles:
-
-- **Radical Minimality**: There is no heavy framework, runtime virtual machine, or complex graph compiler. Tensors map directly to `GPUBuffer` views, and commands record directly into WebGPU passes. The entire runtime layer is thin, predictable, and transparent.
-- **Self-Contained Shader Encapsulation**: Every operator lives in its own dedicated file under `src/shaders/`. All logic needed by an operator—hand-written WGSL kernel source, shape and dtype validation, uniform layout packing, and dispatch geometry—is cleanly collocated in one place.
-- **Effortless Extensibility**: The core runtime is completely decoupled from operator semantics. Adding a new operator requires zero changes to the engine: implement the `Shader` interface in a new file, export it in `src/shaders/index.ts`, and it is automatically registered for both standalone execution and ExecuTorch program graphs.
-- **Static Memory Efficiency**: Intermediate activations leverage ExecuTorch's ahead-of-time memory planner. Multiple tensors with non-overlapping lifetimes share pre-allocated GPU storage pools, eliminating runtime allocation overhead and keeping memory consumption deterministic.
