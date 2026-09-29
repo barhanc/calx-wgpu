@@ -10,10 +10,12 @@ Calx is a pure WebGPU inference runtime for PyTorch ExecuTorch `.pte` models,
 written in TypeScript. Kernels are hand-written WGSL; tensors live in GPU
 buffers and are executed as recorded command sequences.
 
-> [!NOTE]
-> I got bored — this was an excursion into WebGPU-based ML inference engines,
-> made for learning purposes. I no longer work on this (maybe I will come back)
-> because I got bored and pursue other interests.
+> [!WARNING]
+> This is an unfinished, experimental project and a lot of things still break.
+>
+> It was an excursion into WebGPU-based ML inference engines made for learning
+> purposes. I no longer actively work on this (maybe I will come back) to pursue
+> other interests.
 
 ## Quick start
 
@@ -53,7 +55,17 @@ const outArray = new Float32Array(outBytes);
 
 ### Running programs
 
-You can also execute full serialized ExecuTorch models (`program.json` + `weights.bin`) using `recordProgram`. The runtime automatically manages shared GPU memory pools according to the memory plan, uploads constant weights, dispatches the operator chain, and copies outputs back into user tensors:
+You can execute full serialized ExecuTorch models using `recordProgram`. Convert an ExecuTorch `.pte` file (exported for WebGPU) into a `program.json` + `weights.bin` pair using the Python conversion script:
+
+```bash
+# Convert an existing .pte model
+python scripts/pte_to_program.py model_webgpu.pte -o model/
+
+# Or export and convert a demo model
+python scripts/pte_to_program.py --export-demo -o scripts/build/
+```
+
+The runtime automatically manages shared GPU memory pools according to the memory plan, uploads constant weights, dispatches the operator chain, and copies outputs back into user tensors:
 
 ```ts
 import { WgpuExecutionContext, type Program } from 'calx-wgpu';
