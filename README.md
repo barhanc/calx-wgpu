@@ -19,7 +19,6 @@ buffers and are executed as recorded command sequences.
 
 ```bash
 npm install
-npm run build   # bundle the library
 npm test        # vitest + headless WebGPU (SwiftShader)
 npm run example # browser demo at localhost
 ```
@@ -51,3 +50,85 @@ const durMs = performance.now() - t0;
 const outBytes = await out.getData();
 const outArray = new Float32Array(outBytes);
 ```
+
+### Running programs
+
+You can also execute full serialized ExecuTorch models (`program.json` + `weights.bin`) using `recordProgram`. The runtime automatically manages shared GPU memory pools according to the memory plan, uploads constant weights, dispatches the operator chain, and copies outputs back into user tensors:
+
+```ts
+import { WgpuExecutionContext, type Program } from 'calx-wgpu';
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice();
+
+const ctx = new WgpuExecutionContext(device);
+
+// Program graph: out = (in1 + 1.5 * in2) @ in3
+//
+// Chain:
+//   1. aten.add.Tensor: temp = in1 + 1.5 * in2   (values 0, 1, 2 -> 3)
+//   2. aten.mm.default:  out = temp @ in3        (values 3, 4 -> 5)
+//
+// Memory planning (all tensors [2, 2] = 16 bytes):
+//   - in1 and out share pool 0 (non-overlapping lifetimes)
+//   - in2 is allocated in pool 1
+//   - temp intermediate is allocated in pool 2
+//   - in3 is allocated in pool 3
+const prog: Program = {
+  version: '1',
+  chain: [
+    { name: 'aten.add.Tensor', args: [0, 1, 2, 3] },
+    { name: 'aten.mm.default', args: [3, 4, 5] },
+  ],
+  values: [
+    { type: 'tensor', shape: [2, 2], dtype: 'float32', memObjId: 0 },
+    { type: 'tensor', shape: [2, 2], dtype: 'float32', memObjId: 1 },
+    { type: 'scalar', value: 1.5 },
+    { type: 'tensor', shape: [2, 2], dtype: 'float32', memObjId: 2 },
+    { type: 'tensor', shape: [2, 2], dtype: 'float32', memObjId: 3 },
+    { type: 'tensor', shape: [2, 2], dtype: 'float32', memObjId: 0 }, // reuses pool 0 with in1
+  ],
+  inputIds: [0, 1, 4],
+  outputIds: [5],
+  memoryPlan: {
+    pools: [
+      { id: 0, size: 16 },
+      { id: 1, size: 16 },
+      { id: 2, size: 16 },
+      { id: 3, size: 16 },
+    ],
+  },
+};
+
+const weights = new ArrayBuffer(0); // Raw constant tensor data (e.g. weights.bin)
+
+const xData = new Float32Array([1, 2, 3, 4]);
+const yData = new Float32Array([10, 20, 30, 40]);
+const zData = new Float32Array([1, 2, 3, 4]);
+
+// Prepare inputs and output tensor
+const in1 = ctx.tensor('float32', [2, 2]).setData(xData);
+const in2 = ctx.tensor('float32', [2, 2]).setData(yData);
+const in3 = ctx.tensor('float32', [2, 2]).setData(zData);
+const out = ctx.tensor('float32', [2, 2]);
+
+// Record the program: pass inputs followed by outputs ([...inputs, ...outputs])
+ctx.recordProgram(prog, weights, [in1, in2, in3, out]);
+
+const t0 = performance.now();
+ctx.submit();
+await ctx.sync();
+const durMs = performance.now() - t0;
+
+const outBytes = await out.getData();
+const outArray = new Float32Array(outBytes); // [112, 160, 240, 352]
+```
+
+## Philosophy
+
+Calx is built around a few core architectural principles:
+
+- **Radical Minimality**: There is no heavy framework, runtime virtual machine, or complex graph compiler. Tensors map directly to `GPUBuffer` views, and commands record directly into WebGPU passes. The entire runtime layer is thin, predictable, and transparent.
+- **Self-Contained Shader Encapsulation**: Every operator lives in its own dedicated file under `src/shaders/`. All logic needed by an operator—hand-written WGSL kernel source, shape and dtype validation, uniform layout packing, and dispatch geometry—is cleanly collocated in one place.
+- **Effortless Extensibility**: The core runtime is completely decoupled from operator semantics. Adding a new operator requires zero changes to the engine: implement the `Shader` interface in a new file, export it in `src/shaders/index.ts`, and it is automatically registered for both standalone execution and ExecuTorch program graphs.
+- **Static Memory Efficiency**: Intermediate activations leverage ExecuTorch's ahead-of-time memory planner. Multiple tensors with non-overlapping lifetimes share pre-allocated GPU storage pools, eliminating runtime allocation overhead and keeping memory consumption deterministic.
