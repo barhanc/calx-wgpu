@@ -10,8 +10,7 @@ Calx is a pure WebGPU inference runtime for PyTorch ExecuTorch `.pte` models,
 written in TypeScript. Kernels are hand-written WGSL; tensors live in GPU
 buffers and are executed as recorded command sequences.
 
-## Status
-
+> [!NOTE]
 > I got bored — this was an excursion into WebGPU-based ML inference engines,
 > made for learning purposes. I no longer work on this (maybe I will come back)
 > because I got bored and pursue other interests.
@@ -46,7 +45,7 @@ ctx.recordShader(shaders.add, [in1, in2, 2.0, out]);
 
 const t0 = performance.now();
 ctx.submit();
-ctx.sync();
+await ctx.sync();
 const durMs = performance.now() - t0;
 
 const outBytes = await out.getData();

@@ -145,7 +145,7 @@ runBtn.addEventListener('click', async () => {
     log('9. Executing context dispatches on WebGPU...');
     const t0 = performance.now();
     ctx.submit();
-    await device.queue.onSubmittedWorkDone();
+    await ctx.sync();
     const durationMs = performance.now() - t0;
     log(`   Execution completed in ${durationMs.toFixed(3)}ms (GPU queue wall-time)`);
     log(`   Out shape: [${out.shape.join(', ')}]`);
