@@ -43,8 +43,11 @@ const out = ctx.tensor('float32', [2, 3]);
 
 // Compute out = in1 + 2.0 * in2
 ctx.recordShader(shaders.add, [in1, in2, 2.0, out]);
+
+const t0 = performance.now();
 ctx.submit();
 ctx.sync();
+const durMs = performance.now() - t0;
 
 const outBytes = await out.getData();
 const outArray = new Float32Array(outBytes);
