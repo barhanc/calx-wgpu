@@ -144,3 +144,15 @@ const durMs = performance.now() - t0;
 const outBytes = await out.getData();
 const outArray = new Float32Array(outBytes); // [112, 160, 240, 352]
 ```
+
+## Live Demo: Real-Time Selfie Segmentation
+
+Calx includes an interactive browser application under `example/` that performs real-time foreground segmentation on live camera input using a PyTorch ExecuTorch model running purely on WebGPU.
+
+To run the demo:
+
+```bash
+npm run example
+```
+
+Open `http://localhost:5173` in a WebGPU-capable browser (e.g. Chrome 113+ on macOS/Windows/Linux) and click the camera icon.
