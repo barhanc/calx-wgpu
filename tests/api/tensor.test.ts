@@ -116,4 +116,17 @@ describe('Tensor', () => {
     expect(Array.from(data)).toEqual(Array.from(original));
     ctx.destroy();
   });
+
+  it('handles unaligned byte sizes in setData and getData', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+    // 3 bytes (unaligned to 4)
+    const t = ctx.tensor('uint8', [3]);
+    const original = new Uint8Array([7, 42, 99]);
+    t.setData(original);
+
+    const data = new Uint8Array(await t.getData());
+    expect(Array.from(data)).toEqual([7, 42, 99]);
+    ctx.destroy();
+  });
 });

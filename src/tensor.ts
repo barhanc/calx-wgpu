@@ -112,11 +112,15 @@ export class Tensor {
       throw new Error(`setData: source (${src.byteLength}B) < required (${byteLength}B)`);
     }
 
-    if (src instanceof ArrayBuffer) {
-      this.#device.queue.writeBuffer(this.#buffer, 0, src, 0, byteLength);
-    } else {
-      this.#device.queue.writeBuffer(this.#buffer, 0, src.buffer, src.byteOffset, byteLength);
-    }
+    const alignedSize = Math.ceil(byteLength / 4) * 4;
+    const bytes = new Uint8Array(alignedSize);
+    bytes.set(
+      src instanceof ArrayBuffer
+        ? new Uint8Array(src, 0, byteLength)
+        : new Uint8Array(src.buffer, src.byteOffset, byteLength)
+    );
+
+    this.#device.queue.writeBuffer(this.#buffer, 0, bytes.buffer, bytes.byteOffset, alignedSize);
     return this;
   }
 
@@ -127,16 +131,17 @@ export class Tensor {
    */
   async getData(): Promise<ArrayBuffer> {
     const byteLength = this.byteLength;
-    const alignedSize = Math.max(16, Math.ceil(byteLength / 4) * 4);
+    const copySize = Math.ceil(byteLength / 4) * 4;
+    const stagingSize = Math.max(16, copySize);
 
     const encoder = this.#device.createCommandEncoder();
-    const staging = this.#device.createBuffer({ size: alignedSize, usage: STAGING_BUFFER_USAGE });
+    const staging = this.#device.createBuffer({ size: stagingSize, usage: STAGING_BUFFER_USAGE });
 
     try {
-      encoder.copyBufferToBuffer(this.#buffer, 0, staging, 0, alignedSize);
+      encoder.copyBufferToBuffer(this.#buffer, 0, staging, 0, copySize);
       this.#device.queue.submit([encoder.finish()]);
       await staging.mapAsync(GPUMapMode.READ);
-      return staging.getMappedRange(0, byteLength).slice(0);
+      return staging.getMappedRange(0, stagingSize).slice(0, byteLength);
     } finally {
       staging.destroy();
     }
