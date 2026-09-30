@@ -5,6 +5,7 @@ import { convWithClamp } from './convWithClamp';
 import { hardswish } from './hardswish';
 import { meanDim } from './meanDim';
 import { mm } from './mm';
+import { mul } from './mul';
 import { sigmoid } from './sigmoid';
 
 /**
@@ -12,7 +13,7 @@ import { sigmoid } from './sigmoid';
  */
 // prettier-ignore
 export const shaders = {
-  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm, sigmoid,
+  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm, mul, sigmoid,
 } as const;
 
 /**
