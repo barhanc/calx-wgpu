@@ -1,4 +1,5 @@
 import { add } from './add';
+import { constantPadNd } from './constantPadNd';
 import { mm } from './mm';
 
 /**
@@ -6,6 +7,7 @@ import { mm } from './mm';
  */
 export const shaders = {
   add,
+  constantPadNd,
   mm,
 } as const;
 
