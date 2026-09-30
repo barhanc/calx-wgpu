@@ -1,14 +1,14 @@
 import { add } from './add';
 import { constantPadNd } from './constantPadNd';
+import { convolution } from './convolution';
 import { mm } from './mm';
 
 /**
  * Namespace containing all registered WebGPU compute shaders.
  */
+// prettier-ignore
 export const shaders = {
-  add,
-  constantPadNd,
-  mm,
+  add, constantPadNd, convolution, mm,
 } as const;
 
 /**

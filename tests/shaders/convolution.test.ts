@@ -1,0 +1,226 @@
+import { describe, it } from 'vitest';
+import { WgpuExecutionContext, shaders } from '../../src';
+import { setupGPU, expectTensorClose } from '../helpers';
+
+describe('aten.convolution.default', () => {
+  it('computes 2D dense convolution with bias', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+
+    // input: [1, 1, 3, 3]
+    const inp = ctx
+      .tensor('float32', [1, 1, 3, 3])
+      .setData(new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9]));
+
+    // weight: [1, 1, 2, 2]
+    const weight = ctx.tensor('float32', [1, 1, 2, 2]).setData(new Float32Array([1, 0, 0, 1]));
+
+    // bias: [1]
+    const bias = ctx.tensor('float32', [1]).setData(new Float32Array([10]));
+
+    // out: [1, 1, 2, 2] with stride 1, pad 0, dilation 1
+    const out = ctx.tensor('float32', [1, 1, 2, 2]);
+
+    ctx.recordShader(shaders.convolution, [
+      inp,
+      weight,
+      bias,
+      [1, 1], // stride
+      [0, 0], // padding
+      [1, 1], // dilation
+      false, // transposed
+      [0, 0], // output_padding
+      1, // groups
+      out,
+    ]);
+    ctx.submit();
+    await ctx.sync();
+
+    // patch (0,0): 1*1 + 5*1 + 10 = 16
+    // patch (0,1): 2*1 + 6*1 + 10 = 18
+    // patch (1,0): 4*1 + 8*1 + 10 = 22
+    // patch (1,1): 5*1 + 9*1 + 10 = 24
+    await expectTensorClose(out, [16, 18, 22, 24]);
+    ctx.destroy();
+  });
+
+  it('computes depthwise grouped 2D convolution', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+
+    // input: [1, 2, 2, 2]
+    const inp = ctx.tensor('float32', [1, 2, 2, 2]).setData(
+      new Float32Array([
+        // channel 0
+        1, 2, 3, 4,
+        // channel 1
+        10, 20, 30, 40,
+      ])
+    );
+
+    // weight: [2, 1, 2, 2] with groups = 2 (depthwise)
+    const weight = ctx.tensor('float32', [2, 1, 2, 2]).setData(
+      new Float32Array([
+        // filter 0 for channel 0: sum
+        1, 1, 1, 1,
+        // filter 1 for channel 1: weighted
+        1, 0, 0, 1,
+      ])
+    );
+
+    const out = ctx.tensor('float32', [1, 2, 1, 1]);
+
+    ctx.recordShader(shaders.convolution, [
+      inp,
+      weight,
+      undefined, // no bias
+      [1, 1],
+      [0, 0],
+      [1, 1],
+      false,
+      [0, 0],
+      2, // groups
+      out,
+    ]);
+    ctx.submit();
+    await ctx.sync();
+
+    // ch0: 1 + 2 + 3 + 4 = 10
+    // ch1: 10*1 + 40*1 = 50
+    await expectTensorClose(out, [10, 50]);
+    ctx.destroy();
+  });
+
+  it('computes transposed 2D convolution', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+
+    // input: [1, 1, 2, 2]
+    const inp = ctx.tensor('float32', [1, 1, 2, 2]).setData(new Float32Array([1, 2, 3, 4]));
+
+    // transposed weight: [IC=1, OC/groups=1, KH=2, KW=2]
+    const weight = ctx.tensor('float32', [1, 1, 2, 2]).setData(new Float32Array([1, 1, 1, 1]));
+
+    // stride 2 -> upsample to [1, 1, 3, 3] with stride=2, pad=0, kernel=2, but formula:
+    // OH = (2 - 1)*2 - 0 + 1*(2-1) + 0 + 1 = 2 + 1 + 1 = 4. With OH=4, OW=4:
+    const out = ctx.tensor('float32', [1, 1, 4, 4]);
+
+    ctx.recordShader(shaders.convolution, [
+      inp,
+      weight,
+      undefined,
+      [2, 2], // stride 2
+      [0, 0], // pad 0
+      [1, 1], // dilation 1
+      true, // transposed
+      [0, 0], // output_padding
+      1, // groups
+      out,
+    ]);
+    ctx.submit();
+    await ctx.sync();
+
+    // Scatter 2x2 into 4x4 with 2x2 box filter:
+    // [1, 1, 2, 2]
+    // [1, 1, 2, 2]
+    // [3, 3, 4, 4]
+    // [3, 3, 4, 4]
+    await expectTensorClose(out, [1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4]);
+    ctx.destroy();
+  });
+
+  it('computes non-trivial multi-channel conv2d with padding, stride, and bias', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+
+    // input: [1, 2, 5, 5] = 50 elements (1..50)
+    const inpData = Float32Array.from({ length: 50 }, (unused, i) => i + 1);
+    const inp = ctx.tensor('float32', [1, 2, 5, 5]).setData(inpData);
+
+    // weight: [3, 2, 3, 3] = 54 elements
+    const weightData = Float32Array.from({ length: 54 }, (unused, i) => (i + 1) * 0.1);
+    const weight = ctx.tensor('float32', [3, 2, 3, 3]).setData(weightData);
+
+    // bias: [3]
+    const bias = ctx.tensor('float32', [3]).setData(new Float32Array([2.5, -1.0, 0.5]));
+
+    // stride: [2, 2], padding: [1, 1], dilation: [1, 1]
+    // OH = (5 + 2*1 - 1*(3-1) - 1)/2 + 1 = 3, OW = 3 -> out: [1, 3, 3, 3]
+    const out = ctx.tensor('float32', [1, 3, 3, 3]);
+
+    ctx.recordShader(shaders.convolution, [
+      inp,
+      weight,
+      bias,
+      [2, 2],
+      [1, 1],
+      [1, 1],
+      false,
+      [0, 0],
+      1,
+      out,
+    ]);
+    ctx.submit();
+    await ctx.sync();
+
+    await expectTensorClose(
+      out,
+      [
+        202.5, 312.9, 214.5, 370.3, 559.0, 373.9, 264.9, 392.1, 257.7, 436.6, 698.2, 491.8, 885.2,
+        1381.7, 953.6, 715.0, 1101.4, 751.0, 675.7, 1088.5, 774.1, 1405.1, 2209.4, 1538.3, 1170.1,
+        1815.7, 1249.3,
+      ],
+      1e-3
+    );
+    ctx.destroy();
+  });
+
+  it('computes non-trivial multi-channel conv_transpose2d with stride, padding, and output_padding', async () => {
+    const device = await setupGPU();
+    const ctx = new WgpuExecutionContext(device);
+
+    // input: [1, 2, 3, 3] = 18 elements (1..18)
+    const inpData = Float32Array.from({ length: 18 }, (unused, i) => i + 1);
+    const inp = ctx.tensor('float32', [1, 2, 3, 3]).setData(inpData);
+
+    // transposed weight: [IC=2, OC=2, KH=3, KW=3] = 36 elements
+    const weightData = Float32Array.from({ length: 36 }, (unused, i) => (i + 1) * 0.05);
+    const weight = ctx.tensor('float32', [2, 2, 3, 3]).setData(weightData);
+
+    // bias: [2]
+    const bias = ctx.tensor('float32', [2]).setData(new Float32Array([1.5, -2.0]));
+
+    // stride: [2, 2], padding: [1, 1], output_padding: [1, 1], dilation: [1, 1]
+    // OH = (3 - 1)*2 - 2*1 + 1*(3-1) + 1 + 1 = 4 - 2 + 2 + 1 + 1 = 6, OW = 6 -> out: [1, 2, 6, 6]
+    const out = ctx.tensor('float32', [1, 2, 6, 6]);
+
+    ctx.recordShader(shaders.convolution, [
+      inp,
+      weight,
+      bias,
+      [2, 2],
+      [1, 1],
+      [1, 1],
+      true,
+      [1, 1],
+      1,
+      out,
+    ]);
+    ctx.submit();
+    await ctx.sync();
+
+    await expectTensorClose(
+      out,
+      [
+        13.25, 26.3, 14.65, 29.1, 16.05, 16.8, 28.3, 57.7, 31.1, 63.3, 33.9, 35.7, 17.45, 34.7,
+        18.85, 37.5, 20.25, 21.3, 36.7, 74.5, 39.5, 80.1, 42.3, 44.7, 21.65, 43.1, 23.05, 45.9,
+        24.45, 25.8, 25.1, 50.3, 26.8, 53.7, 28.5, 29.85,
+
+        14.7, 33.6, 17.0, 38.2, 19.3, 20.05, 37.4, 81.2, 42.0, 90.4, 46.6, 48.4, 21.6, 47.4, 23.9,
+        52.0, 26.2, 27.25, 51.2, 108.8, 55.8, 118.0, 60.4, 62.8, 28.5, 61.2, 30.8, 65.8, 33.1,
+        34.45, 31.95, 68.4, 34.55, 73.6, 37.15, 38.5,
+      ]
+    );
+    ctx.destroy();
+  });
+});
