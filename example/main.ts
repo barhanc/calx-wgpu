@@ -1,6 +1,8 @@
 import { startFrameLoop } from './loop';
 
 const video = document.getElementById('video') as HTMLVideoElement;
+const canvas = document.getElementById('view') as HTMLCanvasElement;
+const fps = document.getElementById('fps') as HTMLDivElement;
 const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
 const statusDot = document.getElementById('status-dot') as HTMLSpanElement;
 const statusText = document.getElementById('status-text') as HTMLSpanElement;
@@ -23,8 +25,13 @@ async function start() {
     await video.play();
 
     setStatus('camera live', 'live');
-    await startFrameLoop(video);
-  } catch {
+    await startFrameLoop(video, canvas, (fpsVal, msVal) => {
+      fps.textContent = `${fpsVal} FPS · ${msVal.toFixed(1)} MS`;
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(error);
+    fps.textContent = '';
     setStatus('camera unavailable', 'error');
   }
 }

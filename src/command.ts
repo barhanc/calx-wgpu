@@ -1,7 +1,7 @@
 /**
- * Binding specification for constructing bind groups.
+ * A buffer binding specification for constructing bind groups.
  */
-export type BindingSpec = {
+export type BufferBindingSpec = {
   /** The shader binding index corresponding to `@binding(n)` in WGSL. */
   readonly binding: number;
   /** The underlying WebGPU buffer to bind. */
@@ -11,6 +11,21 @@ export type BindingSpec = {
   /** Optional size in bytes of the buffer slice accessible to the shader. */
   readonly size?: number;
 };
+
+/**
+ * A generic WebGPU resource binding specification (e.g. texture view, sampler).
+ */
+export type ResourceBindingSpec = {
+  /** The shader binding index corresponding to `@binding(n)` in WGSL. */
+  readonly binding: number;
+  /** The WebGPU binding resource (texture view, sampler, external texture, etc.). */
+  readonly resource: GPUBindingResource;
+};
+
+/**
+ * Binding specification for constructing bind groups.
+ */
+export type BindingSpec = BufferBindingSpec | ResourceBindingSpec;
 
 /**
  * Result of creating a compute pipeline and matching bind group.
@@ -113,10 +128,12 @@ export function createComputeBundle(
     deviceMap.set(cacheKey, pipeline);
   }
 
-  const bindGroupEntries: GPUBindGroupEntry[] = bindings.map((b) => ({
-    binding: b.binding,
-    resource: { buffer: b.buffer, offset: b.offset, size: b.size },
-  }));
+  const bindGroupEntries: GPUBindGroupEntry[] = bindings.map((b) => {
+    if ('buffer' in b) {
+      return { binding: b.binding, resource: { buffer: b.buffer, offset: b.offset, size: b.size } };
+    }
+    return { binding: b.binding, resource: b.resource };
+  });
 
   const bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),

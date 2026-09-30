@@ -67,25 +67,25 @@ A `GPUBuffer` is a raw VRAM allocation — the fundamental data structure for ML
 
 A buffer's `usage` bitfield restricts what operations can target it (validated at creation):
 
-| Flag | Purpose |
-|------|---------|
-| `STORAGE` | Read/write from compute shaders (`var<storage>`) |
-| `UNIFORM` | Read-only, small, cached params (`var<uniform>`) |
-| `COPY_SRC` | Source of `copyBufferToBuffer` |
-| `COPY_DST` | Destination of copy / `writeBuffer` |
-| `MAP_READ` | CPU readback via `mapAsync` |
+| Flag       | Purpose                                          |
+| ---------- | ------------------------------------------------ |
+| `STORAGE`  | Read/write from compute shaders (`var<storage>`) |
+| `UNIFORM`  | Read-only, small, cached params (`var<uniform>`) |
+| `COPY_SRC` | Source of `copyBufferToBuffer`                   |
+| `COPY_DST` | Destination of copy / `writeBuffer`              |
+| `MAP_READ` | CPU readback via `mapAsync`                      |
 
 Common patterns:
 
 ```typescript
 // Tensor data (compute input/output)
-GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
 // Per-dispatch params (shapes, scalars)
-GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 
 // Staging buffer for GPU → CPU readback
-GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
 ```
 
 ### Uniform vs Storage
@@ -107,7 +107,7 @@ const staging = device.createBuffer({ size, usage: MAP_READ | COPY_DST });
 encoder.copyBufferToBuffer(gpuBuf, 0, staging, 0, size);
 device.queue.submit([encoder.finish()]);
 await staging.mapAsync(GPUMapMode.READ);
-const data = staging.getMappedRange(0, size).slice(0);  // copy out
+const data = staging.getMappedRange(0, size).slice(0); // copy out
 staging.destroy();
 ```
 
@@ -147,6 +147,7 @@ fn main(
 ```
 
 The key relationship:
+
 ```
 global_invocation_id = workgroup_id * workgroup_size + local_invocation_id
 ```
@@ -183,6 +184,7 @@ workgroupBarrier();  // wait for ALL threads to finish reading before overwritin
 ```
 
 `workgroupBarrier()` does three things:
+
 1. All writes before the barrier complete and become visible to all threads in the workgroup
 2. All threads wait for each other to arrive
 3. All threads resume past the barrier together
@@ -237,18 +239,18 @@ array<vec3<f32>, N>  // stride = 16, not 12!
 
 ### Size and alignment table
 
-| Type | Align | Size |
-|------|------:|-----:|
-| `f32`, `i32`, `u32` | 4 | 4 |
-| `f16` | 2 | 2 |
-| `vec2<f32>` | 8 | 8 |
-| `vec3<f32>` | **16** | **12** |
-| `vec4<f32>` | 16 | 16 |
-| `mat3x3<f32>` | 16 | **48** (3 × 16-byte columns) |
-| `mat4x4<f32>` | 16 | 64 |
-| `array<E, N>` (storage) | `alignOf(E)` | `N × roundUp(alignOf(E), sizeOf(E))` |
-| `array<E, N>` (uniform) | **16** | `N × roundUp(16, sizeOf(E))` |
-| `struct` | `max(member aligns)` | `roundUp(structAlign, endOfLastMember)` |
+| Type                    |                Align |                                    Size |
+| ----------------------- | -------------------: | --------------------------------------: |
+| `f32`, `i32`, `u32`     |                    4 |                                       4 |
+| `f16`                   |                    2 |                                       2 |
+| `vec2<f32>`             |                    8 |                                       8 |
+| `vec3<f32>`             |               **16** |                                  **12** |
+| `vec4<f32>`             |                   16 |                                      16 |
+| `mat3x3<f32>`           |                   16 |            **48** (3 × 16-byte columns) |
+| `mat4x4<f32>`           |                   16 |                                      64 |
+| `array<E, N>` (storage) |         `alignOf(E)` |    `N × roundUp(alignOf(E), sizeOf(E))` |
+| `array<E, N>` (uniform) |               **16** |            `N × roundUp(16, sizeOf(E))` |
+| `struct`                | `max(member aligns)` | `roundUp(structAlign, endOfLastMember)` |
 
 **Uniform buffers** have stricter rules: array element stride must be a multiple of 16 bytes. Use `vec4` slots to avoid padding waste.
 
@@ -267,7 +269,7 @@ For N elements with 1D workgroups of size 256:
 ```typescript
 const wgSize = 256;
 const totalWGs = Math.ceil(N / wgSize);
-const dispatchX = Math.min(totalWGs, 65535);   // max per dimension
+const dispatchX = Math.min(totalWGs, 65535); // max per dimension
 const dispatchY = Math.ceil(totalWGs / 65535); // fold overflow into Y
 ```
 
@@ -290,10 +292,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 ### The two levels
 
-| Level | Mechanism | Purpose |
-|-------|-----------|---------|
-| **Shader-side** | `workgroupBarrier()`, `storageBarrier()` | Sync threads within a workgroup |
-| **Host-side** | `queue.onSubmittedWorkDone()`, `buffer.mapAsync()` | Sync CPU with GPU |
+| Level           | Mechanism                                          | Purpose                         |
+| --------------- | -------------------------------------------------- | ------------------------------- |
+| **Shader-side** | `workgroupBarrier()`, `storageBarrier()`           | Sync threads within a workgroup |
+| **Host-side**   | `queue.onSubmittedWorkDone()`, `buffer.mapAsync()` | Sync CPU with GPU               |
 
 These operate at completely different levels. Shader barriers never affect the CPU; host fences never affect shader threads.
 
@@ -327,15 +329,15 @@ staging.destroy();
 
 ## Limits That Matter for ML
 
-| Limit | Default | Why it matters |
-|-------|--------:|----------------|
-| `maxStorageBufferBindingSize` | 128 MB | Max tensor size per binding |
-| `maxBufferSize` | 256 MB | Max single buffer allocation |
-| `maxComputeInvocationsPerWorkgroup` | 256 | Max threads per workgroup (CUDA block size) |
-| `maxComputeWorkgroupStorageSize` | 16 KB | Shared memory per workgroup |
-| `maxComputeWorkgroupsPerDimension` | 65,535 | Max dispatch dimension |
-| `maxStorageBuffersPerShaderStage` | 8 | Max storage buffers per shader |
-| `maxUniformBufferBindingSize` | 64 KB | Max params buffer size |
+| Limit                               | Default | Why it matters                              |
+| ----------------------------------- | ------: | ------------------------------------------- |
+| `maxStorageBufferBindingSize`       |  128 MB | Max tensor size per binding                 |
+| `maxBufferSize`                     |  256 MB | Max single buffer allocation                |
+| `maxComputeInvocationsPerWorkgroup` |     256 | Max threads per workgroup (CUDA block size) |
+| `maxComputeWorkgroupStorageSize`    |   16 KB | Shared memory per workgroup                 |
+| `maxComputeWorkgroupsPerDimension`  |  65,535 | Max dispatch dimension                      |
+| `maxStorageBuffersPerShaderStage`   |       8 | Max storage buffers per shader              |
+| `maxUniformBufferBindingSize`       |   64 KB | Max params buffer size                      |
 
 These are **defaults** — query `device.limits` and request higher via `requiredLimits`. For large models, `maxStorageBufferBindingSize` and `maxBufferSize` are the usual bottlenecks.
 
@@ -343,11 +345,11 @@ These are **defaults** — query `device.limits` and request higher via `require
 
 ## Features for ML
 
-| Feature | Why it matters |
-|---------|---------------|
-| `shader-f16` | Halve memory bandwidth with `f16` tensors |
-| `subgroups` | Warp-level parallelism (like CUDA warp shuffles) |
-| `timestamp-query` | Profile individual kernel execution times |
+| Feature           | Why it matters                                   |
+| ----------------- | ------------------------------------------------ |
+| `shader-f16`      | Halve memory bandwidth with `f16` tensors        |
+| `subgroups`       | Warp-level parallelism (like CUDA warp shuffles) |
+| `timestamp-query` | Profile individual kernel execution times        |
 
 ---
 
@@ -363,10 +365,13 @@ function getPipeline(device: GPUDevice, code: string, key: string) {
   cache.set(device, m);
   if (!m.has(key)) {
     const module = device.createShaderModule({ code });
-    m.set(key, device.createComputePipeline({
-      layout: 'auto',
-      compute: { module, entryPoint: 'main' },
-    }));
+    m.set(
+      key,
+      device.createComputePipeline({
+        layout: 'auto',
+        compute: { module, entryPoint: 'main' },
+      })
+    );
   }
   return m.get(key)!;
 }
