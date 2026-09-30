@@ -32,7 +32,7 @@ async function start() {
     // eslint-disable-next-line no-console
     console.error(error);
     fps.textContent = '';
-    setStatus('camera unavailable', 'error');
+    setStatus('pipeline error', 'error');
   }
 }
 
