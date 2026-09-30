@@ -3,6 +3,7 @@ import { constantPadNd } from './constantPadNd';
 import { convolution } from './convolution';
 import { convWithClamp } from './convWithClamp';
 import { hardswish } from './hardswish';
+import { meanDim } from './meanDim';
 import { mm } from './mm';
 
 /**
@@ -10,7 +11,7 @@ import { mm } from './mm';
  */
 // prettier-ignore
 export const shaders = {
-  add, constantPadNd, convolution, convWithClamp, hardswish, mm,
+  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm,
 } as const;
 
 /**
