@@ -63,12 +63,18 @@ export async function startFrameLoop(
   });
 
   // Persistent textures — keep bind groups valid across frames
-  // Note: copyExternalImageToTexture destination requires COPY_DST | RENDER_ATTACHMENT in Dawn
   const vidUsage =
     GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
   const resUsage = GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING;
+
   const vidTexture = device.createTexture({ size, format: 'rgba8unorm', usage: vidUsage });
   const resTexture = device.createTexture({ size, format: 'rgba8unorm', usage: resUsage });
+
+  // OffscreenCanvas used to crop the centred square from the raw video and scale it to
+  // model input size. copyExternalImageToTexture is pixel-for-pixel (no scaling), so we
+  // use drawImage to perform the crop + downscale before uploading to the GPU texture.
+  const cropCanvas = new OffscreenCanvas(size[0], size[1]);
+  const cropCtx = cropCanvas.getContext('2d')!;
 
   // Load model program descriptor and weights
   const [programRes, weightsRes] = await Promise.all([
@@ -100,14 +106,13 @@ export async function startFrameLoop(
 
     const start = performance.now();
 
-    // Snapshot centered square from the video to match CSS object-fit: cover display
-    const sx = Math.floor((video.videoWidth - video.videoHeight) / 2);
-    const sy = 0;
-    device.queue.copyExternalImageToTexture(
-      { source: video, origin: { x: sx, y: sy } },
-      { texture: vidTexture },
-      size
-    );
+    // Crop and scale the centred square of the video to 256×256 using drawImage,
+    // then upload the scaled result to the GPU texture.
+    const minDim = Math.min(video.videoWidth, video.videoHeight);
+    const sx = Math.floor((video.videoWidth - minDim) / 2);
+    const sy = Math.floor((video.videoHeight - minDim) / 2);
+    cropCtx.drawImage(video, sx, sy, minDim, minDim, 0, 0, size[0], size[1]);
+    device.queue.copyExternalImageToTexture({ source: cropCanvas }, { texture: vidTexture }, size);
 
     // Re-encode and submit recorded compute commands
     ctx.submit();
