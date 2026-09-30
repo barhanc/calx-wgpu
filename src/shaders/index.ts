@@ -1,13 +1,13 @@
 import { add } from './add';
-import { constantPadNd } from './constantPadNd';
+import { constantPadNd } from './constant-pad-nd';
 import { convolution } from './convolution';
-import { convWithClamp } from './convWithClamp';
+import { convWithClamp } from './conv-with-clamp';
 import { hardswish } from './hardswish';
-import { meanDim } from './meanDim';
+import { meanDim } from './mean-dim';
 import { mm } from './mm';
 import { mul } from './mul';
 import { sigmoid } from './sigmoid';
-import { upsampleBilinear2d } from './upsampleBilinear2d';
+import { upsampleBilinear2d } from './upsample-bilinear2d';
 
 /**
  * Namespace containing all registered WebGPU compute shaders.
