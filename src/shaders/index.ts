@@ -7,13 +7,14 @@ import { meanDim } from './meanDim';
 import { mm } from './mm';
 import { mul } from './mul';
 import { sigmoid } from './sigmoid';
+import { upsampleBilinear2d } from './upsampleBilinear2d';
 
 /**
  * Namespace containing all registered WebGPU compute shaders.
  */
 // prettier-ignore
 export const shaders = {
-  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm, mul, sigmoid,
+  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm, mul, sigmoid, upsampleBilinear2d,
 } as const;
 
 /**
