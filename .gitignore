@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-example
 .vite
 coverage
 *.log
@@ -9,6 +10,6 @@ coverage
 third-party/
 .vscode/
 *.pte
-!example/assets/selfie-segmentation/*.pte
+!example/public/assets/selfie-segmentation/*.pte
 .venv/
 scripts/build/

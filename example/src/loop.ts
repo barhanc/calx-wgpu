@@ -77,9 +77,10 @@ export async function startFrameLoop(
   const cropCtx = cropCanvas.getContext('2d')!;
 
   // Load model program descriptor and weights
+  const base = import.meta.env.BASE_URL;
   const [programRes, weightsRes] = await Promise.all([
-    fetch('/assets/selfie-segmentation/program.json'),
-    fetch('/assets/selfie-segmentation/weights.bin'),
+    fetch(`${base}assets/selfie-segmentation/program.json`),
+    fetch(`${base}assets/selfie-segmentation/weights.bin`),
   ]);
 
   if (!programRes.ok || !weightsRes.ok) {
