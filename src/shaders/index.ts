@@ -5,13 +5,14 @@ import { convWithClamp } from './convWithClamp';
 import { hardswish } from './hardswish';
 import { meanDim } from './meanDim';
 import { mm } from './mm';
+import { sigmoid } from './sigmoid';
 
 /**
  * Namespace containing all registered WebGPU compute shaders.
  */
 // prettier-ignore
 export const shaders = {
-  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm,
+  add, constantPadNd, convolution, convWithClamp, hardswish, meanDim, mm, sigmoid,
 } as const;
 
 /**
