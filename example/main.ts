@@ -2,10 +2,12 @@ import { startFrameLoop } from './loop';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 const canvas = document.getElementById('view') as HTMLCanvasElement;
-const fps = document.getElementById('fps') as HTMLDivElement;
+
 const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
 const statusDot = document.getElementById('status-dot') as HTMLSpanElement;
 const statusText = document.getElementById('status-text') as HTMLSpanElement;
+
+const fps = document.getElementById('fps') as HTMLDivElement;
 
 function setStatus(text: string, state: 'idle' | 'starting' | 'live' | 'error') {
   statusText.textContent = text;

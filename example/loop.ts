@@ -62,16 +62,10 @@ export async function startFrameLoop(
   });
 
   // Persistent textures — keep bind groups valid across frames
-  const vidTexture = device.createTexture({
-    size,
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
-  });
-  const resTexture = device.createTexture({
-    size,
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
-  });
+  const vidUsage = GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING;
+  const resUsage = GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING;
+  const vidTexture = device.createTexture({ size, format: 'rgba8unorm', usage: vidUsage });
+  const resTexture = device.createTexture({ size, format: 'rgba8unorm', usage: resUsage });
 
   // Load model program descriptor and weights
   const [programRes, weightsRes] = await Promise.all([
