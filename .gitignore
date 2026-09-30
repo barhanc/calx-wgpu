@@ -9,5 +9,6 @@ coverage
 third-party/
 .vscode/
 *.pte
+!example/assets/selfie-segmentation/*.pte
 .venv/
 scripts/build/
