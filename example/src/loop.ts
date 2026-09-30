@@ -28,13 +28,11 @@ function onNextVideoFrame(video: HTMLVideoElement, callback: () => void): void {
  *
  * @param video The playing camera video to source frames from.
  * @param canvas The canvas element to render the segmented video output to.
- * @param onMetrics Optional callback invoked after each frame with FPS and latency in ms.
  * @returns A stop function that halts the frame loop and cleans up resources.
  */
 export async function startFrameLoop(
   video: HTMLVideoElement,
-  canvas: HTMLCanvasElement,
-  onMetrics?: (fps: number, ms: number) => void
+  canvas: HTMLCanvasElement
 ): Promise<() => void> {
   // Acquire WebGPU device
   const adapter = await navigator.gpu.requestAdapter();
@@ -99,18 +97,16 @@ export async function startFrameLoop(
     .recordShader(postprocess, [vidTexture, out, resTexture]);
 
   let running = true;
-  let last = performance.now();
 
   const onFrame = async (): Promise<void> => {
     if (!running) return;
-
-    const start = performance.now();
 
     // Crop and scale the centred square of the video to 256×256 using drawImage,
     // then upload the scaled result to the GPU texture.
     const minDim = Math.min(video.videoWidth, video.videoHeight);
     const sx = Math.floor((video.videoWidth - minDim) / 2);
     const sy = Math.floor((video.videoHeight - minDim) / 2);
+
     cropCtx.drawImage(video, sx, sy, minDim, minDim, 0, 0, size[0], size[1]);
     device.queue.copyExternalImageToTexture({ source: cropCanvas }, { texture: vidTexture }, size);
 
@@ -125,17 +121,6 @@ export async function startFrameLoop(
       size
     );
     device.queue.submit([encoder.finish()]);
-
-    // Wait for GPU execution to complete and measure pipeline latency
-    await device.queue.onSubmittedWorkDone();
-
-    // Track frame rate and report metrics
-    const ms = performance.now() - start;
-    const now = performance.now();
-    const fps = Math.round(1000 / (now - last));
-
-    onMetrics?.(fps, ms);
-    last = now;
 
     onNextVideoFrame(video, onFrame);
   };
