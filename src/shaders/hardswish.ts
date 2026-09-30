@@ -53,9 +53,7 @@ function recordIn(ctx: WgpuExecutionContext, [inTensor, outTensor]: HardswishArg
     throw new Error(`${name}: Only float32 tensors are currently supported`);
   }
   if (inTensor.numel !== outTensor.numel) {
-    throw new Error(
-      `${name}: input numel (${inTensor.numel}) != output numel (${outTensor.numel})`
-    );
+    throw new Error(`${name}: input numel != output numel`);
   }
 
   const device = ctx.device;
