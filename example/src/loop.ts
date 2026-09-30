@@ -9,8 +9,8 @@
  * 5. Per-frame submit recorded queue commands and copy result texture to canvas.
  */
 
-import type { Program } from '../src';
-import { WgpuExecutionContext } from '../src';
+import type { Program } from '../../src';
+import { WgpuExecutionContext } from '../../src';
 import { postprocess, preprocess } from './shaders';
 
 const size = [256, 256];
