@@ -1,5 +1,5 @@
 /**
- * Preprocess and postprocess shaders for the selfie segmentation pipeline.
+ * Preprocess and postprocess compute shaders for the selfie segmentation pipeline.
  */
 
 import type { Shader, Tensor } from '../../src';

@@ -2,11 +2,11 @@
  * Per-frame WebGPU loop for the selfie-segmentation demo.
  *
  * Implements a record-once pipeline:
- * 1. Snapshot video frame into persistent video texture (device.queue.copyExternalImageToTexture).
+ * 1. Snapshot centered square from video into persistent video texture.
  * 2. Record preprocess shader (samples video texture -> writes input tensor).
  * 3. Record ExecuTorch model program (input tensor -> output mask tensor).
  * 4. Record postprocess shader (blends video texture with mask -> writes result texture).
- * 5. Per-frame submit recorded queue commands and copy result texture to canvas.
+ * 5. Per-frame copy result texture to canvas via copyTextureToTexture.
  */
 
 import type { Program } from '../../src';
@@ -54,15 +54,18 @@ export async function startFrameLoop(
   canvas.width = size[0];
   canvas.height = size[1];
 
+  // Use rgba8unorm so the canvas texture supports COPY_DST (bgra8unorm does not on some backends)
   canvasCtx.configure({
     device,
     format: 'rgba8unorm',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
     alphaMode: 'premultiplied',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
   });
 
   // Persistent textures — keep bind groups valid across frames
-  const vidUsage = GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING;
+  // Note: copyExternalImageToTexture destination requires COPY_DST | RENDER_ATTACHMENT in Dawn
+  const vidUsage =
+    GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
   const resUsage = GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING;
   const vidTexture = device.createTexture({ size, format: 'rgba8unorm', usage: vidUsage });
   const resTexture = device.createTexture({ size, format: 'rgba8unorm', usage: resUsage });
@@ -97,13 +100,19 @@ export async function startFrameLoop(
 
     const start = performance.now();
 
-    // Snapshot video frame into persistent video texture
-    device.queue.copyExternalImageToTexture({ source: video }, { texture: vidTexture }, size);
+    // Snapshot centered square from the video to match CSS object-fit: cover display
+    const sx = Math.floor((video.videoWidth - video.videoHeight) / 2);
+    const sy = 0;
+    device.queue.copyExternalImageToTexture(
+      { source: video, origin: { x: sx, y: sy } },
+      { texture: vidTexture },
+      size
+    );
 
     // Re-encode and submit recorded compute commands
     ctx.submit();
 
-    // Present result texture to canvas
+    // Copy result texture to canvas (no intermediate blit shader needed)
     const encoder = device.createCommandEncoder();
     encoder.copyTextureToTexture(
       { texture: resTexture },
