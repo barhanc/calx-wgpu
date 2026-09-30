@@ -15,11 +15,11 @@ import { postprocess, preprocess } from './shaders';
 
 const size = [256, 256];
 
-function onNextVideoFrame(video: HTMLVideoElement, callback: () => void): void {
+function onNextVideoFrame(video: HTMLVideoElement, callback: (now: number) => void): void {
   if ('requestVideoFrameCallback' in video) {
-    video.requestVideoFrameCallback(() => callback());
+    video.requestVideoFrameCallback((now) => callback(now));
   } else {
-    requestAnimationFrame(() => callback());
+    requestAnimationFrame((now) => callback(now));
   }
 }
 
@@ -28,11 +28,13 @@ function onNextVideoFrame(video: HTMLVideoElement, callback: () => void): void {
  *
  * @param video The playing camera video to source frames from.
  * @param canvas The canvas element to render the segmented video output to.
+ * @param onMetrics Optional callback invoked with smoothed FPS and GPU inference latency in ms.
  * @returns A stop function that halts the frame loop and cleans up resources.
  */
 export async function startFrameLoop(
   video: HTMLVideoElement,
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  onMetrics?: (fps: number, ms: number) => void
 ): Promise<() => void> {
   // Acquire WebGPU device
   const adapter = await navigator.gpu.requestAdapter();
@@ -97,9 +99,18 @@ export async function startFrameLoop(
     .recordShader(postprocess, [vidTexture, out, resTexture]);
 
   let running = true;
+  let inFlight = false;
+  let lastTime = 0;
+  let [smoothedFps, smoothedMs] = [0, 0];
 
-  const onFrame = async (): Promise<void> => {
+  const onFrame = (now: number): void => {
     if (!running) return;
+
+    if (lastTime > 0) {
+      const fps = 1000 / (now - lastTime);
+      smoothedFps = smoothedFps ? smoothedFps * 0.9 + fps * 0.1 : fps;
+    }
+    lastTime = now;
 
     // Crop and scale the centred square of the video to 256×256 using drawImage,
     // then upload the scaled result to the GPU texture.
@@ -121,6 +132,18 @@ export async function startFrameLoop(
       size
     );
     device.queue.submit([encoder.finish()]);
+
+    // Asynchronous non-blocking GPU latency tracking
+    if (onMetrics && !inFlight) {
+      inFlight = true;
+      device.queue.onSubmittedWorkDone().then(() => {
+        if (!running) return;
+        inFlight = false;
+        const elapsed = performance.now() - now;
+        smoothedMs = smoothedMs ? smoothedMs * 0.8 + elapsed * 0.2 : elapsed;
+        onMetrics(Math.round(smoothedFps), smoothedMs);
+      });
+    }
 
     onNextVideoFrame(video, onFrame);
   };

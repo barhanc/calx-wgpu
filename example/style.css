@@ -141,6 +141,8 @@ h1 {
   font-size: 0.64rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
   background: rgba(5, 6, 7, 0.7);
   border: 1px solid var(--line);
   border-radius: 8px;

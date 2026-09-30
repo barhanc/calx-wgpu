@@ -27,7 +27,11 @@ async function start() {
     await video.play();
 
     setStatus('camera live', 'live');
-    await startFrameLoop(video, canvas);
+    await startFrameLoop(video, canvas, (fpsVal, msVal) => {
+      const fpsStr = String(fpsVal).padStart(2, ' ');
+      const msStr = msVal.toFixed(1).padStart(4, ' ');
+      fps.textContent = `${fpsStr} FPS · ${msStr} MS`;
+    });
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(error);
